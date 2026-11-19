@@ -1,0 +1,13 @@
+{
+  "name": "Мой корейский",
+  "short_name": "한국어",
+  "description": "Тренажёр корейского по пройденным урокам",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f6f1e7",
+  "theme_color": "#c8372d",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
