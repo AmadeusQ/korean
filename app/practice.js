@@ -287,6 +287,16 @@
 
   const norm = (s) => s.replace(/[\s.,!?·…'"]/g, '');
 
+  // Слоги ответа по позициям: где ошибся — красным, чего не хватает — пустой клеткой
+  function diffHtml(typed, answer) {
+    const a = [...norm(typed)], b = [...norm(answer)];
+    const n = Math.max(a.length, b.length);
+    const mine = Array.from({ length: n }, (_, i) => a[i] === undefined ? '<span class="cell miss">·</span>'
+      : `<span class="cell ${a[i] === b[i] ? '' : 'bad'}">${esc(a[i])}</span>`).join('');
+    const right = b.map((c, i) => `<span class="cell ${a[i] === c ? '' : 'bad'}">${esc(c)}</span>`).join('');
+    return `<div class="diff"><div class="diff-row"><span>ты написал</span><span class="cells">${mine}</span></div><div class="diff-row"><span>правильно</span><span class="cells">${right}</span></div></div>`;
+  }
+
   // ---------- экран тренировки ----------
   function start(root, mode, nums) {
     const pool = buildPool(mode, nums);
@@ -309,7 +319,7 @@
     root.innerHTML = `
       <section class="session">
         <header class="s-top">
-          <a class="icon-btn" href="#/practice" aria-label="Выйти">${icon('close')}</a>
+          <button class="icon-btn quit" type="button" aria-label="Выйти">${icon('close')}</button>
           <div class="segs"></div>
           <span class="s-count"></span>
         </header>
@@ -317,6 +327,11 @@
         <footer class="s-foot"></footer>
       </section>`;
     const $body = root.querySelector('.s-body'), $foot = root.querySelector('.s-foot');
+    const quit = () => {
+      if (results.length && idx < queue.length && !confirm('Выйти из тренировки? Уже данные ответы сохранены.')) return;
+      clearTimeout(autoTimer); location.hash = '#/practice';
+    };
+    root.querySelector('.quit').addEventListener('click', quit);
 
     function progress() {
       root.querySelector('.segs').innerHTML = queue.map((_, i) => `<i class="${i < idx ? (marks[i] ? 'ok' : 'bad') : i === idx ? 'cur' : ''}"></i>`).join('');
@@ -357,9 +372,9 @@
     function renderType() {
       const kbOn = Store.settings().keyboard;
       $body.innerHTML = head() + `<form class="type-form"><input class="type-in" lang="ko" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="한글로…" ${kbOn ? 'inputmode="none"' : ''}>${kbOn ? '' : '<button class="btn">Проверить</button>'}</form>
-        <div class="hint"><button type="button" class="link show-hint">Подсказка: первый слог</button></div>`;
+        <div class="hint"><button type="button" class="link show-hint">Подсказка: первый слог</button>${matchMedia('(pointer: fine)').matches ? ' · можно печатать с клавиатуры: gkrtod → 학생' : ''}</div>`;
       const f = $body.querySelector('form'), inp = $body.querySelector('input');
-      if (kbOn) Keyboard.attach($body, inp, () => f.requestSubmit());
+      Keyboard.attach($body, inp, () => f.requestSubmit(), kbOn);
       setTimeout(() => inp.focus({ preventScroll: true }), 50);
       $body.querySelector('.show-hint').addEventListener('click', (e) => { e.target.textContent = 'Начинается с: ' + [...q.answer][0]; });
       f.addEventListener('submit', (e) => {
@@ -367,6 +382,7 @@
         const v = inp.value.trim(); if (!v) return;
         const ok = norm(v) === norm(q.answer);
         inp.disabled = true; inp.classList.add(ok ? 'right' : 'wrong');
+        if (!ok) q.explain = diffHtml(v, q.answer) + q.explain;
         done(ok);
       });
     }
@@ -472,12 +488,18 @@
 
     function done(ok) {
       answered = true; record(ok);
+      $body.querySelector('.kb')?.remove();
       if (q.sayAfter) TTS.speak(q.sayAfter);
       $foot.className = 's-foot show ' + (ok ? 'ok' : 'bad');
       $foot.innerHTML = `<div class="fb"><div class="fb-title">${ok ? pick(['맞아요', '좋아요', '잘했어요']) + ' <small>верно</small>' : '틀렸어요 <small>правильный ответ</small>'}</div>
         <div class="fb-ex">${q.explain || ''}</div></div><button class="btn wide next">Дальше</button>`;
-      const nb = $foot.querySelector('.next'); nb.addEventListener('click', () => { idx++; next(); }); nb.focus({ preventScroll: true });
+      const nb = $foot.querySelector('.next');
+      let gone = false; const go = () => { if (gone) return; gone = true; clearTimeout(autoTimer); idx++; next(); };
+      nb.addEventListener('click', go); nb.focus({ preventScroll: true });
+      // верный ответ — дальше сами; после ошибки ждём, чтобы успеть прочитать разбор
+      if (ok && Store.settings().autoNext) { nb.classList.add('auto'); autoTimer = setTimeout(go, 1400); }
     }
+    let autoTimer = null;
 
     function finish() {
       document.body.classList.remove('in-session');
@@ -503,13 +525,14 @@
 
     function onKey(e) {
       if (!document.body.classList.contains('in-session')) return;
+      if (e.key === 'Escape') { quit(); return; }
       if (e.target.tagName === 'INPUT' && e.key !== 'Enter') return;
       if (answered && e.key === 'Enter') { e.preventDefault(); $foot.querySelector('.next')?.click(); return; }
       if (!answered && q?.kind === 'choice' && /^[1-4]$/.test(e.key)) { const i = +e.key - 1; if (q.options[i]) choose_(i); }
       if (!answered && q?.kind === 'card' && (e.key === ' ' || e.key === 'Enter')) { e.preventDefault(); $foot.querySelector('.reveal')?.click(); }
     }
     document.addEventListener('keydown', onKey);
-    start.cleanup = () => { document.removeEventListener('keydown', onKey); document.body.classList.remove('in-session'); };
+    start.cleanup = () => { clearTimeout(autoTimer); document.removeEventListener('keydown', onKey); document.body.classList.remove('in-session'); };
     next();
   }
 

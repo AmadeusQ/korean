@@ -51,8 +51,9 @@
 
       <div class="home-cols">
         <section class="block">
-          <h2 class="h">Режимы</h2>
-          ${modeGrid(allNums())}
+          <h2 class="h">Что делать сейчас</h2>
+          ${quickList(last, due)}
+          <a class="link all-modes" href="#/practice">Все режимы тренировки →</a>
         </section>
         <div>
           <section class="block">
@@ -61,14 +62,21 @@
               ${cal.map((d) => `<span class="c l${lvl(d)}" ${d ? `title="${d.date}: ${d.n}"` : ''}></span>`).join('')}</div>
             <div class="cal-legend muted xs">меньше <span class="c l0"></span><span class="c l1"></span><span class="c l2"></span><span class="c l3"></span> больше</div>
           </section>
-          ${last ? `<section class="block">
-            <h2 class="h">Последний урок</h2>
-            <a class="last-lesson" href="#/lesson/${last.number}"><span class="kicker serif">제${last.number}과</span><b>${esc(last.title)}</b><span class="muted sm">${esc(last.topics.slice(0, 3).map((t) => t.split(':')[0]).join(' · '))}</span></a>
-            <a class="link" href="#/practice/mix?l=${last.number}">Тренировать этот урок →</a>
-          </section>` : ''}
+
         </div>
       </div>
     `;
+  }
+
+  function quickList(last, due) {
+    const nMist = Practice.mistakes(allNums()).length;
+    const row = (href, ex, title, desc) => `<a class="mode" href="${href}"><span class="mode-ex serif">${ex}</span><span class="mode-t"><b>${title}</b><span>${desc}</span></span><span class="arr">→</span></a>`;
+    return `<div class="modes">
+      ${row('#/practice/mix', '오늘', 'Тренировка дня', due ? `Сначала повторение: ${plural(due, 'слово', 'слова', 'слов')}` : 'Слова, хангыль, грамматика и фразы вперемешку')}
+      ${nMist ? row('#/practice/mistakes', '오답', 'Мои ошибки', `${plural(nMist, 'задание', 'задания', 'заданий')}, в которых ты ошибался`) : ''}
+      ${last ? row(`#/practice/mix?l=${last.number}`, `${last.number}과`, 'Последний урок', esc(last.title)) : ''}
+      ${last ? row(`#/practice/test?l=${last.number}`, '시험', 'Контрольная', `По уроку ${last.number}${Store.getTest(last.number) ? ` · лучший результат ${Store.getTest(last.number).best}%` : ''}`) : ''}
+    </div>`;
   }
 
   function modeGrid(nums) {
@@ -133,7 +141,7 @@
     }
   }
 
-  const wordRow = (w) => { const e = DB.byKo.get(w.ko) || w; return `<div class="wrow"><div class="w-ko"><span class="ko">${esc(w.ko)}</span>${UI.rr(w.ko)}</div><div class="w-ru">${esc(w.ru)}</div>${strength(e.key)}${sayBtn(w.ko, 'sm')}</div>`; };
+  const wordRow = (w) => { const e = DB.byKo.get(w.ko) || w; return `<div class="wrow" data-ko="${esc(w.ko)}"><div class="w-ko"><span class="ko">${esc(w.ko)}</span>${UI.rr(w.ko)}</div><div class="w-ru">${esc(w.ru)}</div>${strength(e.key)}${sayBtn(w.ko, 'sm')}</div>`; };
   const TAB = {
     overview(l) {
       const units = l.hangul.map((u) => H.UNITS[u]);
@@ -174,6 +182,37 @@
     draw(); document.body.appendChild(box);
   }
 
+  // Карточка слова: нажатие на строку в словаре или в уроке
+  function wordSheet(e) {
+    const s = Store.get(e.key);
+    const lines = [
+      ...DB.dialogues(allNums()).flatMap((d) => d.lines), ...DB.grammar(allNums()).flatMap((g) => g.examples),
+      ...DB.entries.filter((x) => x.kind === 'phrase'),
+    ].filter((l) => l.ko !== e.ko && l.ko.split(/\s+/).some((t) => t.replace(/[.,!?]/g, '').startsWith(e.ko)));
+    const ex = UI.uniqBy(lines, (l) => l.ko).slice(0, 5);
+    document.querySelectorAll('.sheet-wrap').forEach((x) => x.remove());
+    const box = document.createElement('div'); box.className = 'sheet-wrap';
+    box.innerHTML = `<div class="sheet" role="dialog" aria-label="${esc(e.ko)}">
+      <button class="icon-btn sheet-x" aria-label="Закрыть">${icon('close')}</button>
+      <div class="sheet-head">${UI.cells(e.ko, 'big')}${sayBtn(e.ko)}</div>
+      <div class="rr sheet-rr">${esc(H.romanize(e.ko))}</div>
+      <div class="sheet-ru">${esc(e.ru)}</div>
+      <div class="muted sm">${esc(e.c)} · ${e.lessons.map((n) => `<a class="link" href="#/lesson/${n}">${n}과</a>`).join(', ')}</div>
+      <div class="sheet-stats">${s ? `${strength(e.key)} <span class="sm">верно ${s.right}, ошибок ${s.wrong}</span>` : '<span class="sm muted">Ещё не тренировалось</span>'}</div>
+      ${ex.length ? `<h2 class="h">Встречается во фразах</h2>${ex.map((l) => `<div class="exm"><div><span class="ko">${esc(l.ko)}</span><div class="muted sm">${esc(l.ru)}</div></div>${sayBtn(l.ko, 'sm')}</div>`).join('')}` : ''}
+    </div>`;
+    const close = () => { box.remove(); document.removeEventListener('keydown', key); };
+    const key = (ev) => { if (ev.key === 'Escape') close(); };
+    box.addEventListener('click', (ev) => { if (ev.target === box || ev.target.closest('.sheet-x') || ev.target.closest('a')) close(); });
+    document.addEventListener('keydown', key);
+    document.body.appendChild(box);
+  }
+  document.addEventListener('click', (ev) => {
+    const r = ev.target.closest('.wrow[data-ko]');
+    if (!r || ev.target.closest('.say') || document.body.classList.contains('in-session')) return;
+    const e = DB.byKo.get(r.dataset.ko); if (e) wordSheet(e);
+  });
+
   // ---------- Словарь ----------
   const dictState = { q: '', lesson: 'all', cat: 'all', sort: 'lesson' };
   function dict(root) {
@@ -198,7 +237,7 @@
       if (dictState.sort === 'weak') list = list.slice().sort((a, b) => Store.box(a.key) - Store.box(b.key));
       $('.count').textContent = list.length;
       $('#dict-cards').href = `#/practice/cards${dictState.lesson === 'all' ? '' : '?l=' + dictState.lesson}`;
-      const row = (e) => `<div class="wrow"><div class="w-ko"><span class="ko serif">${esc(e.ko)}</span>${UI.rr(e.ko)}</div>
+      const row = (e) => `<div class="wrow" data-ko="${esc(e.ko)}"><div class="w-ko"><span class="ko serif">${esc(e.ko)}</span>${UI.rr(e.ko)}</div>
         <div class="w-ru">${esc(e.ru)}<div class="w-meta">${esc(e.c)} · ${e.lessons.map((n) => `${n}과`).join(', ')}</div></div>${strength(e.key)}${sayBtn(e.ko, 'sm')}</div>`;
       const groupOf = dictState.sort === 'abc' ? (e) => { const d = H.decompose(e.ko[0]); return d ? d.cho : e.ko[0]; }
         : dictState.sort === 'lesson' ? (e) => `제${e.lesson}과` : null;
@@ -308,6 +347,7 @@
       <div class="card form">
         <h3>Тренировка</h3>
         <label class="field"><span>Цель: ответов в день</span><input type="number" min="5" max="300" step="5" value="${s.dailyGoal}" data-k="dailyGoal"></label>
+        <label class="field"><span>После верного ответа переходить дальше сам</span><input type="checkbox" data-k="autoNext" ${s.autoNext ? 'checked' : ''}></label>
         <label class="field"><span>Задания с набором текста</span><input type="checkbox" data-k="typing" ${s.typing ? 'checked' : ''}></label>
         <label class="field"><span>Экранная корейская клавиатура (выключи, если есть своя корейская раскладка)</span><input type="checkbox" data-k="keyboard" ${s.keyboard ? 'checked' : ''}></label>
       </div>

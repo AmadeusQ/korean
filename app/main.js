@@ -4,6 +4,7 @@
 
   function route() {
     Practice.cleanup();
+    document.querySelectorAll('.sheet-wrap, .lightbox').forEach((x) => x.remove());
     const [path, query] = (location.hash.slice(1) || '/').split('?');
     const params = new URLSearchParams(query || '');
     const parts = path.split('/').filter(Boolean);

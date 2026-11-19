@@ -51,9 +51,23 @@
   const ROWS = [['ㅂ', 'ㅈ', 'ㄷ', 'ㄱ', 'ㅅ', 'ㅛ', 'ㅕ', 'ㅑ', 'ㅐ', 'ㅔ'], ['ㅁ', 'ㄴ', 'ㅇ', 'ㄹ', 'ㅎ', 'ㅗ', 'ㅓ', 'ㅏ', 'ㅣ'], ['shift', 'ㅋ', 'ㅌ', 'ㅊ', 'ㅍ', 'ㅠ', 'ㅜ', 'ㅡ', 'back']];
   const SHIFT = { 'ㅂ': 'ㅃ', 'ㅈ': 'ㅉ', 'ㄷ': 'ㄸ', 'ㄱ': 'ㄲ', 'ㅅ': 'ㅆ', 'ㅐ': 'ㅒ', 'ㅔ': 'ㅖ' };
 
-  // Подключить к полю ввода. onEnter вызывается по кнопке «готово».
-  function attach(host, input, onEnter) {
+  // Физические клавиши → буквы по раскладке 두벌식 (по коду клавиши, работает и при русской/английской раскладке)
+  const CODE = { KeyQ: 'ㅂ', KeyW: 'ㅈ', KeyE: 'ㄷ', KeyR: 'ㄱ', KeyT: 'ㅅ', KeyY: 'ㅛ', KeyU: 'ㅕ', KeyI: 'ㅑ', KeyO: 'ㅐ', KeyP: 'ㅔ',
+    KeyA: 'ㅁ', KeyS: 'ㄴ', KeyD: 'ㅇ', KeyF: 'ㄹ', KeyG: 'ㅎ', KeyH: 'ㅗ', KeyJ: 'ㅓ', KeyK: 'ㅏ', KeyL: 'ㅣ',
+    KeyZ: 'ㅋ', KeyX: 'ㅌ', KeyC: 'ㅊ', KeyV: 'ㅍ', KeyB: 'ㅠ', KeyN: 'ㅜ', KeyM: 'ㅡ' };
+  const CODE_SHIFT = { KeyQ: 'ㅃ', KeyW: 'ㅉ', KeyE: 'ㄸ', KeyR: 'ㄲ', KeyT: 'ㅆ', KeyO: 'ㅒ', KeyP: 'ㅖ' };
+
+  // Подключить к полю ввода. onEnter вызывается по кнопке «готово». visual=false — только физическая клавиатура.
+  function attach(host, input, onEnter, visual = true) {
     let seq = toSeq(input.value), shift = false;
+    input.addEventListener('keydown', (e) => {
+      if (e.isComposing || e.ctrlKey || e.metaKey || e.altKey) return;
+      if (/[ㄱ-ㆎ가-힣]/.test(e.key) || e.key === 'Process') return; // уже стоит корейская раскладка
+      const j = (e.shiftKey && CODE_SHIFT[e.code]) || CODE[e.code];
+      if (j) { e.preventDefault(); seq.push(j); sync(); return; }
+      if (e.key === 'Backspace' && input.selectionStart === input.value.length && input.selectionEnd === input.value.length) { e.preventDefault(); seq.pop(); sync(); return; }
+      if (e.key === ' ') { e.preventDefault(); seq.push(' '); sync(); }
+    });
     const kb = document.createElement('div'); kb.className = 'kb';
     const draw = () => {
       kb.innerHTML = ROWS.map((r) => `<div class="kb-row">${r.map((k) => {
@@ -77,6 +91,7 @@
     });
     // если печатают с обычной клавиатуры — подхватить
     input.addEventListener('input', () => { seq = toSeq(input.value); });
+    if (!visual) return null;
     draw(); host.appendChild(kb);
     return kb;
   }
