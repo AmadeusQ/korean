@@ -17,6 +17,7 @@
       case 'dict': return Views.dict(view);
       case 'hangul': return Views.hangul(view);
       case 'settings': return Views.settings(view);
+      case 'import': return Views.importLink(view, parts[1] || '');
       case 'practice':
         if (parts[1] && Practice.MODES[parts[1]]) return Practice.start(view, parts[1], nums);
         return Views.practiceMenu(view);

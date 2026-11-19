@@ -23,7 +23,8 @@
     shuffle: '<path d="M3 7h4l10 10h4M3 17h4l3-3M14 10l3-3h4"/><path d="m18 4 3 3-3 3M18 14l3 3-3 3"/>',
     image: '<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m21 17-5-5-9 8"/>',
     check: '<path d="m5 12 5 5 9-10"/>',
-    star: '<path d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/>',
+    mic: '<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3M8 21h8"/>',
+    star:'<path d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/>',
   };
   const icon = (name, cls = '') => `<svg class="ic ${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name] || ''}</svg>`;
   const sayBtn = (ko, cls = '') => `<button class="say ${cls}" data-say="${esc(ko)}" aria-label="Послушать">${icon('speaker')}</button>`;
@@ -45,12 +46,21 @@
     if (b) { e.preventDefault(); e.stopPropagation(); say(b.dataset.say); }
   });
 
-  // Сила запоминания: 0..6 → точки
+  // Сила запоминания: 0..6 → 4 клетки
   function strength(key) {
     const b = Store.box(key);
     const lvl = b < 0 ? 0 : Math.min(4, Math.ceil((b + 1) * 4 / (Store.MAX_BOX + 1)));
-    return `<span class="dots l${lvl}" title="${b < 0 ? 'ещё не тренировалось' : 'уровень ' + b + ' из ' + Store.MAX_BOX}"><i></i><i></i><i></i><i></i></span>`;
+    return `<span class="lvl l${lvl}" title="${b < 0 ? 'ещё не тренировалось' : 'уровень ' + b + ' из ' + Store.MAX_BOX}"><i></i><i></i><i></i><i></i></span>`;
   }
 
-  window.UI = { esc, shuffle, pick, uniqBy, icon, sayBtn, rr, toast, say, strength };
+  // Слово по слогам в клетках 원고지 (короткие слова без пробелов), иначе обычный текст
+  function cells(ko, cls = '') {
+    const s = [...ko];
+    if (s.length > 6 || /\s/.test(ko) || !s.every(Hangul.isSyllable)) return `<span class="ko serif phrase ${cls}">${esc(ko)}</span>`;
+    return `<span class="cells ${cls}">${s.map((c) => `<span class="cell">${esc(c)}</span>`).join('')}</span>`;
+  }
+  // Печать 도장
+  const stamp = (text) => `<div class="stamp" aria-label="${esc(text)}"><span>${esc(text)}</span></div>`;
+
+  window.UI = { esc, shuffle, pick, uniqBy, icon, sayBtn, rr, toast, say, strength, cells, stamp };
 })();

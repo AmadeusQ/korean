@@ -8,7 +8,7 @@
 materials/lesson-XX/01.jpg …   фото страниц урока (исходник, по порядку)
 data/index.js                   список уроков: window.LESSON_FILES
 data/lessons/lesson-XX.js       содержимое урока: registerLesson({...})
-app/                            код: hangul.js, store.js, tts.js, ui.js, data.js, practice.js, views.js, main.js, styles.css
+app/                            код: hangul.js, store.js, tts.js, ui.js, keyboard.js (экранная клавиатура), data.js, practice.js, views.js, main.js, styles.css
 index.html, manifest.webmanifest, sw.js, icon.svg
 ```
 
@@ -37,9 +37,15 @@ index.html, manifest.webmanifest, sw.js, icon.svg
 
 Сайт выкладывается на GitHub Pages из ветки `main`, корень репозитория. Сайт публичный, поэтому `materials/` (фото учебника) в `.gitignore` и в интернет не попадает. Онлайн вкладки «Конспект» нет (фото не загрузились, и она скрывается), локально фото видны. Приложением могут пользоваться другие люди, поэтому в интерфейсе не должно быть служебных надписей про Claude, папки и личный процесс добавления уроков. После добавления урока: commit и push (только с согласия пользователя), Pages обновится сам за 1–2 минуты.
 
+## Режимы и стиль
+
+Режимы в `MODES` (`app/practice.js`): mix, words, cards, listen, hangul, grammar, build, dialog (ролевой диалог по `dialogues`), write (прописи на canvas с самооценкой), speak (Web Speech Recognition, ko-KR), скрытые mistakes и test (контрольная по уроку, 20 вопросов, лучший результат в `Store.getTest`).
+
+Стиль — «корейская тетрадь»: бумага, тушь, один красный акцент, клетки 원고지 (`UI.cells`), печать 도장 (`UI.stamp`), тонкие линии вместо теней. Не добавлять градиенты, тени, эмодзи, иконки в цветных плашках.
+
 ## Прогресс
 
-`localStorage`, ключ `hangul-study-v1`. Ключи заданий: `w:<ko>` (слово или фраза), `j:<буква>`, `b:<слово>` (патчим), `g:copula:<ko>`, `g:topic:<ko>`, `g:sent:<p>|<job>`, `build:<фраза>`. Не переименовывать ключи без миграции, иначе пропадёт прогресс. Интервалы повторения: коробки 0–6, 0/1/2/4/8/16/32 дня.
+`localStorage`, ключ `hangul-study-v1`. Ключи заданий: `w:<ko>` (слово или фраза), `j:<буква>`, `b:<слово>` (патчим), `g:copula:<ko>`, `g:topic:<ko>`, `g:sent:<p>|<job>`, `build:<фраза>`, `dl:<реплика>`, `write:<цель>`, `speak:<ko>`. Перенос между устройствами: ссылка `#/import/<сжатый прогресс>` (`Store.pack` / `Store.unpack` / `Store.merge`). Не переименовывать ключи без миграции, иначе пропадёт прогресс. Интервалы повторения: коробки 0–6, 0/1/2/4/8/16/32 дня.
 
 ## Озвучка
 

@@ -12,59 +12,70 @@
   const plural = (n, a, b, c) => { const m = n % 10, h = n % 100; return n + ' ' + (m === 1 && h !== 11 ? a : m >= 2 && m <= 4 && (h < 10 || h >= 20) ? b : c); };
 
   // ---------- Главная ----------
+  const WEEK_KO = '월화수목금토일';
   function home(root) {
     const st = Store.todayStats(), goal = Store.settings().dailyGoal;
-    const pct = Math.min(100, Math.round((st.n / goal) * 100));
     const keys = DB.entries.map((e) => e.key);
     const due = dueCount(), streak = Store.streak();
-    const days = Store.lastDays(14); const maxN = Math.max(goal, ...days.map((d) => d.n));
+    const now = new Date();
+    const koDate = `${now.getMonth() + 1}월 ${now.getDate()}일 ${'일월화수목금토'[now.getDay()]}요일`;
+    // календарь за 4 недели, столбцы — дни недели с понедельника
+    const wd = (now.getDay() + 6) % 7;
+    const days = Store.lastDays(21 + wd + 1);
+    const cal = [...days, ...Array(6 - wd).fill(null)];
+    const lvl = (d) => (!d ? 'f' : !d.n ? 0 : d.n >= goal ? 3 : d.n >= goal / 2 ? 2 : 1);
+    const CELLS = 10, filled = Math.min(CELLS, Math.floor((st.n / goal) * CELLS));
     const last = DB.lessons[DB.lessons.length - 1];
-    const hour = new Date().getHours();
-    const hello = hour < 5 ? 'Доброй ночи' : hour < 12 ? 'Доброе утро' : hour < 18 ? 'Добрый день' : 'Добрый вечер';
     root.innerHTML = `
-      <section class="hero">
-        <div class="hero-text">
-          <div class="eyebrow">${hello} · 안녕하세요!</div>
-          <h1>${st.n >= goal ? 'Цель на сегодня выполнена 🎉' : st.n ? 'Продолжим?' : 'Пора потренироваться'}</h1>
-          <p class="muted">${due ? `${plural(due, 'слово ждёт', 'слова ждут', 'слов ждут')} повторения.` : 'Повторять пока нечего, можно учить новое.'}</p>
+      <section class="today">
+        <div class="today-main">
+          <div class="date">${koDate}</div>
+          <h1 class="serif">오늘의 공부</h1>
+          <p class="muted">${st.n >= goal ? 'Цель на сегодня выполнена.' : `Сегодня ${st.n} из ${goal} ответов.`}
+            ${streak ? ` ${plural(streak, 'день', 'дня', 'дней')} подряд.` : ''}</p>
+          <div class="goal-cells" aria-label="Цель дня">${Array.from({ length: CELLS }, (_, i) => `<span class="${i < filled ? 'on' : ''}"></span>`).join('')}</div>
           <div class="row">
-            <a class="btn big" href="#/practice/mix">${icon('play')} Тренировка дня</a>
-            <a class="btn ghost" href="#/practice">Выбрать режим</a>
+            <a class="btn" href="#/practice/mix">Начать тренировку</a>
+            <span class="muted sm">${due ? `${plural(due, 'слово ждёт', 'слова ждут', 'слов ждут')} повторения` : 'Повторять пока нечего — можно учить новое'}</span>
           </div>
         </div>
-        <div class="hero-side">
-          <div class="ring" style="--p:${pct}"><div><b>${st.n}</b><span>из ${goal}</span></div></div>
-          <div class="streak ${streak ? 'on' : ''}">${icon('flame')}<b>${streak}</b><span>${plural(streak, 'день', 'дня', 'дней').replace(/^\d+ /, '')} подряд</span></div>
+        ${st.n >= goal ? UI.stamp('참 잘했어요') : ''}
+      </section>
+
+      <section class="stats">
+        <div><b>${DB.entries.length}</b><span>слов и фраз</span></div>
+        <div><b>${learned(keys)}</b><span>хорошо знаю</span></div>
+        <div><b>${due}</b><span>к повторению</span></div>
+        <div><b>${st.n ? Math.round((st.ok / st.n) * 100) + '%' : '—'}</b><span>точность сегодня</span></div>
+      </section>
+
+      <div class="home-cols">
+        <section class="block">
+          <h2 class="h">Режимы</h2>
+          ${modeGrid(allNums())}
+        </section>
+        <div>
+          <section class="block">
+            <h2 class="h">Четыре недели</h2>
+            <div class="cal">${[...WEEK_KO].map((w) => `<span class="wd">${w}</span>`).join('')}
+              ${cal.map((d) => `<span class="c l${lvl(d)}" ${d ? `title="${d.date}: ${d.n}"` : ''}></span>`).join('')}</div>
+            <div class="cal-legend muted xs">меньше <span class="c l0"></span><span class="c l1"></span><span class="c l2"></span><span class="c l3"></span> больше</div>
+          </section>
+          ${last ? `<section class="block">
+            <h2 class="h">Последний урок</h2>
+            <a class="last-lesson" href="#/lesson/${last.number}"><span class="kicker serif">제${last.number}과</span><b>${esc(last.title)}</b><span class="muted sm">${esc(last.topics.slice(0, 3).map((t) => t.split(':')[0]).join(' · '))}</span></a>
+            <a class="link" href="#/practice/mix?l=${last.number}">Тренировать этот урок →</a>
+          </section>` : ''}
         </div>
-      </section>
-
-      <section class="tiles">
-        <div class="tile"><b>${DB.entries.length}</b><span>слов и фраз</span></div>
-        <div class="tile"><b>${learned(keys)}</b><span>хорошо знаю</span></div>
-        <div class="tile"><b>${due}</b><span>к повторению</span></div>
-        <div class="tile"><b>${st.n ? Math.round((st.ok / st.n) * 100) + '%' : '—'}</b><span>точность сегодня</span></div>
-      </section>
-
-      <section class="card">
-        <div class="card-head"><h3>Активность за 2 недели</h3><span class="muted sm">ответов в день</span></div>
-        <div class="week">${days.map((d) => `<div class="day ${d.n >= goal ? 'full' : ''} ${d.n ? '' : 'zero'}" title="${d.date}: ${d.n}"><i style="height:${d.n ? Math.max(6, (d.n / maxN) * 100) : 0}%"></i><span>${new Date(d.date).getDate()}</span></div>`).join('')}</div>
-      </section>
-
-      ${last ? `<section class="card lesson-cta">
-        <div><div class="eyebrow">Последний урок</div><h3>${last.number}. ${esc(last.title)}</h3><p class="muted sm">${esc(last.topics.slice(0, 3).join(' · '))}</p></div>
-        <div class="row"><a class="btn" href="#/practice/mix?l=${last.number}">Тренировать</a><a class="btn ghost" href="#/lesson/${last.number}">Открыть</a></div>
-      </section>` : ''}
-
-      <h2 class="sec-title">Режимы</h2>
-      ${modeGrid(allNums())}
+      </div>
     `;
   }
 
   function modeGrid(nums) {
     const q = nums.length === allNums().length ? '' : `?l=${nums.join(',')}`;
-    return `<div class="modes">${Object.entries(Practice.MODES).map(([k, m]) => {
-      const off = m.tts && !TTS.available();
-      return `<a class="mode ${off ? 'off' : ''}" href="#/practice/${k}${q}" data-mode="${k}"><span class="mode-ic">${icon(m.icon)}</span><b>${m.title}</b><span>${off ? 'нужен корейский голос' : m.desc}</span></a>`;
+    return `<div class="modes">${Object.entries(Practice.MODES).filter(([, m]) => !m.hidden).map(([k, m]) => {
+      const why = m.tts && !TTS.available() ? 'нужен корейский голос' : m.mic && !Practice.micSupported() ? 'браузер не распознаёт речь' : '';
+      return `<a class="mode ${why ? 'off' : ''}" href="#/practice/${k}${q}" data-mode="${k}"><span class="mode-ex serif">${m.ex}</span><span class="mode-t"><b>${m.title}</b><span>${why || m.desc}</span></span><span class="arr">→</span></a>`;
     }).join('')}</div>`;
   }
 
@@ -75,11 +86,11 @@
         const keys = DB.entries.filter((e) => e.lesson === l.number).map((e) => e.key);
         const m = Math.round(avgMastery(keys) * 100);
         return `<a class="lesson" href="#/lesson/${l.number}">
-          <div class="num">${l.number}<small>урок</small></div>
-          <div class="l-body"><h3>${esc(l.title)}</h3><p class="muted sm">${esc(l.source || '')}</p>
-            <div class="chips">${l.topics.slice(0, 4).map((t) => `<span class="chip">${esc(t.split(':')[0])}</span>`).join('')}</div>
-            <div class="meter"><i style="width:${m}%"></i></div><span class="muted xs">${plural(keys.length, 'новое слово', 'новых слова', 'новых слов')} · освоено ${m}%</span>
-          </div></a>`;
+          <span class="kicker serif">제${l.number}과</span>
+          <span class="l-body"><b>${esc(l.title)}</b><span class="muted sm">${esc(l.topics.map((t) => t.split(':')[0]).join(' · '))}</span>
+            <span class="muted xs">${plural(keys.length, 'новое слово', 'новых слова', 'новых слов')}${Store.getTest(l.number) ? ` · контрольная ${Store.getTest(l.number).best}%` : ''}</span></span>
+          <span class="l-prog"><span class="pbar"><i style="width:${m}%"></i></span><span class="xs muted">${m}%</span></span>
+        </a>`;
       }).join('')}</div>`;
   }
 
@@ -95,9 +106,9 @@
     root.innerHTML = `
       <a class="back" href="#/lessons">${icon('back')} Все уроки</a>
       <section class="lesson-head">
-        <div class="num lg">${l.number}<small>урок</small></div>
-        <div><h1>${esc(l.title)}</h1><p class="muted">${esc(l.source || '')}</p>
-          <div class="row"><a class="btn" href="#/practice/mix?l=${l.number}">${icon('play')} Тренировать урок</a><a class="btn ghost" href="#/practice/cards?l=${l.number}">${icon('cards')} Карточки</a></div></div>
+        <div class="kicker serif lg">제${l.number}과</div>
+        <h1>${esc(l.title)}</h1><p class="muted">${esc(l.source || '')}</p>
+        <div class="row"><a class="btn" href="#/practice/mix?l=${l.number}">Тренировать урок</a><a class="btn ghost" href="#/practice/cards?l=${l.number}">Карточки</a><a class="btn ghost" href="#/practice/test?l=${l.number}">Контрольная${Store.getTest(l.number) ? ` · ${Store.getTest(l.number).best}%` : ''}</a></div>
       </section>
       <nav class="tabs">${tabs.map(([k, t], i) => `<button class="tab ${i ? '' : 'on'}" data-tab="${k}">${t}</button>`).join('')}</nav>
       <div class="tab-body"></div>`;
@@ -129,21 +140,21 @@
       return `<div class="card"><h3>Что прошли</h3><ul class="topics">${l.topics.map((t) => `<li>${esc(t)}</li>`).join('')}</ul></div>
         ${l.notes?.length ? `<div class="card note"><h3>Запомнить</h3>${l.notes.map((n) => `<p>${esc(n)}</p>`).join('')}</div>` : ''}
         ${units.length ? `<div class="card"><h3>Хангыль в этом уроке</h3><div class="chips">${units.map((u) => `<span class="chip">${u.title}</span>`).join('')}</div><a class="link" href="#/hangul">Открыть таблицу хангыля →</a></div>` : ''}
-        <h3 class="sec-title">Как тренировать</h3>${modeGrid([l.number])}`;
+        <h2 class="h">Как тренировать</h2>${modeGrid([l.number])}`;
     },
     words: (l) => `<div class="card list">${l.words.map(wordRow).join('')}</div>`,
     phrases: (l) => {
       const groups = {}; l.phrases.forEach((p) => (groups[p.c || 'Фразы'] = groups[p.c || 'Фразы'] || []).push(p));
       return Object.entries(groups).map(([g, ps]) => `<div class="card list"><h3>${esc(g)}</h3>${ps.map(wordRow).join('')}</div>`).join('');
     },
-    grammar: (l) => l.grammar.map((g) => `<div class="card grammar"><div class="g-head"><h3 class="ko">${esc(g.title)}</h3><span class="muted">${esc(g.short || '')}</span></div>
+    grammar: (l) => l.grammar.map((g) => `<div class="card grammar"><div class="g-head"><h3 class="serif">${esc(g.title)}</h3><span class="muted">${esc(g.short || '')}</span></div>
       ${g.body.map((p) => `<p>${p}</p>`).join('')}
       <div class="examples">${g.examples.map((x) => `<div class="exm"><div><span class="ko">${esc(x.ko)}</span><div class="muted sm">${esc(x.ru)}</div></div>${sayBtn(x.ko, 'sm')}</div>`).join('')}</div></div>`).join('')
-      + `<a class="btn" href="#/practice/grammar?l=${l.number}">${icon('pen')} Тренировать грамматику</a>`,
+      + `<a class="btn" href="#/practice/grammar?l=${l.number}">Тренировать грамматику</a>`,
     dialogues: (l) => `<label class="toggle"><input type="checkbox" class="hide-ru"> Скрыть перевод</label>` + l.dialogues.map((d) => `<div class="card dialog"><h3>${esc(d.title)}</h3>
       ${d.lines.map((x) => `<div class="line">${x.who ? `<span class="who ko">${esc(x.who)}</span>` : '<span class="who"></span>'}<div class="bubble"><span class="ko">${esc(x.ko)}</span><div class="ru">${esc(x.ru)}</div></div>${sayBtn(x.ko, 'sm')}</div>`).join('')}
       <button class="link" data-say="${esc(d.lines.map((x) => x.ko).join(' '))}">${icon('speaker')} Прослушать весь диалог</button></div>`).join('')
-      + `<a class="btn" href="#/practice/build?l=${l.number}">${icon('puzzle')} Собирать фразы</a>`,
+      + `<a class="btn" href="#/practice/build?l=${l.number}">Собирать фразы</a>`,
     photos: (l, photos) => `<div class="gallery">${photos.map((p, i) => `<a href="${p}" data-photo="${i}"><img src="${p}" loading="lazy" alt="Страница ${i + 1}"></a>`).join('')}</div>`,
   };
 
@@ -169,11 +180,11 @@
     root.innerHTML = `<h1 class="page-title">Словарь <span class="muted count"></span></h1>
       <div class="filters">
         <input class="search" type="search" placeholder="Поиск: 학생, студент, hakseng…" value="${esc(dictState.q)}">
-        <select class="f-lesson"><option value="all">Все уроки</option>${DB.lessons.map((l) => `<option value="${l.number}">Урок ${l.number}</option>`).join('')}</select>
+        <select class="f-lesson"><option value="all">Все уроки</option>${DB.lessons.map((l) => `<option value="${l.number}">제${l.number}과</option>`).join('')}</select>
         <select class="f-cat"><option value="all">Все темы</option>${DB.categories().map((c) => `<option>${esc(c)}</option>`).join('')}</select>
         <select class="f-sort"><option value="lesson">По урокам</option><option value="abc">По алфавиту</option><option value="weak">Сначала слабые</option></select>
       </div>
-      <div class="row dict-actions"><a class="btn sm" id="dict-cards" href="#/practice/cards">${icon('cards')} Карточки по этой выборке</a></div>
+      <div class="row dict-actions"><a class="btn sm ghost" id="dict-cards" href="#/practice/cards">Карточки по этой выборке</a></div>
       <div class="card list dict-list"></div>`;
     const $ = (s) => root.querySelector(s);
     $('.f-lesson').value = dictState.lesson; $('.f-cat').value = dictState.cat; $('.f-sort').value = dictState.sort;
@@ -187,8 +198,14 @@
       if (dictState.sort === 'weak') list = list.slice().sort((a, b) => Store.box(a.key) - Store.box(b.key));
       $('.count').textContent = list.length;
       $('#dict-cards').href = `#/practice/cards${dictState.lesson === 'all' ? '' : '?l=' + dictState.lesson}`;
-      $('.dict-list').innerHTML = list.length ? list.map((e) => `<div class="wrow"><div class="w-ko"><span class="ko">${esc(e.ko)}</span>${UI.rr(e.ko)}</div>
-        <div class="w-ru">${esc(e.ru)}<div class="w-meta"><span class="tag">${esc(e.c)}</span><span class="tag ghost">урок ${e.lessons.join(', ')}</span></div></div>${strength(e.key)}${sayBtn(e.ko, 'sm')}</div>`).join('')
+      const row = (e) => `<div class="wrow"><div class="w-ko"><span class="ko serif">${esc(e.ko)}</span>${UI.rr(e.ko)}</div>
+        <div class="w-ru">${esc(e.ru)}<div class="w-meta">${esc(e.c)} · ${e.lessons.map((n) => `${n}과`).join(', ')}</div></div>${strength(e.key)}${sayBtn(e.ko, 'sm')}</div>`;
+      const groupOf = dictState.sort === 'abc' ? (e) => { const d = H.decompose(e.ko[0]); return d ? d.cho : e.ko[0]; }
+        : dictState.sort === 'lesson' ? (e) => `제${e.lesson}과` : null;
+      if (dictState.sort === 'lesson') list = list.slice().sort((a, b) => a.lesson - b.lesson);
+      let html = '', prev = null;
+      for (const e of list) { const g = groupOf && groupOf(e); if (g && g !== prev) { html += `<div class="dgroup serif">${esc(g)}</div>`; prev = g; } html += row(e); }
+      $('.dict-list').innerHTML = list.length ? html
         : '<p class="muted center">Ничего не нашлось</p>';
     };
     $('.search').addEventListener('input', (e) => { dictState.q = e.target.value; draw(); });
@@ -212,7 +229,7 @@
       <p class="muted">Нажми на букву, чтобы услышать её (у согласных под буквой написано название).</p>
       <div class="card builder">
         <h3>Конструктор слога</h3>
-        <div class="b-out"><div class="b-syll ko">가</div><div><span class="rr b-rr">ga</span><div class="b-parts muted"></div></div><button class="say b-say" data-say="가">${icon('speaker')}</button></div>
+        <div class="b-out"><div class="b-syll serif cell-guide">가</div><div><span class="rr b-rr">ga</span><div class="b-parts muted"></div></div><button class="say b-say" data-say="가">${icon('speaker')}</button></div>
         <div class="b-row"><span class="b-lbl">Согласная</span><div class="b-chips" data-part="cho">${H.CHO.map((c, i) => `<button class="${i ? '' : 'on'}" data-v="${c}">${c}</button>`).join('')}</div></div>
         <div class="b-row"><span class="b-lbl">Гласная</span><div class="b-chips" data-part="jung">${H.JUNG.map((c, i) => `<button class="${i ? '' : 'on'}" data-v="${c}">${c}</button>`).join('')}</div></div>
         <div class="b-row"><span class="b-lbl">Патчим</span><div class="b-chips" data-part="jong">${['', 'ㄱ', 'ㄴ', 'ㄷ', 'ㄹ', 'ㅁ', 'ㅂ', 'ㅅ', 'ㅇ', 'ㅈ', 'ㅊ', 'ㅋ', 'ㅌ', 'ㅍ', 'ㅎ', 'ㄲ', 'ㅆ'].map((c, i) => `<button class="${i ? '' : 'on'}" data-v="${c}">${c || '—'}</button>`).join('')}</div></div>
@@ -221,7 +238,7 @@
       <div class="two-col">${table('vowels2')}${table('consonants2')}</div>
       <div class="card"><h3>Патчим: 7 звуков</h3><p class="muted sm">Сколько бы ни было букв, на конце слога звучит только один из семи звуков.</p>
         <div class="batchim">${U.batchim.groups.map((g) => `<div class="bg"><div class="bg-sound ko">[${g.sound}]<span class="rr">${g.rr}</span></div><div class="bg-letters ko">${g.letters}</div><div class="bg-words">${g.words.map((w) => `<button class="tok ko" data-say="${w}">${w}</button>`).join('')}</div></div>`).join('')}</div></div>
-      <a class="btn" href="#/practice/hangul">${icon('letters')} Тренировать хангыль</a>`;
+      <a class="btn" href="#/practice/hangul">Тренировать хангыль</a>`;
     const sel = { cho: 'ㄱ', jung: 'ㅏ', jong: '' };
     const upd = () => {
       const s = H.compose(sel.cho, sel.jung, sel.jong);
@@ -238,6 +255,18 @@
     upd();
   }
 
+  function mistakesBlock(nums) {
+    const list = Practice.mistakes(nums);
+    const label = (it) => it.entry ? `<span class="ko">${esc(it.entry.ko)}</span> — ${esc(it.entry.ru)}`
+      : it.jamo ? `буква <span class="ko">${esc(it.jamo)}</span>` : it.line ? `<span class="ko">${esc(it.line.ko)}</span>`
+      : it.p ? `<span class="ko">${esc(it.p.ko)} … ${esc(it.jb.ko)}</span>` : it.dlg ? `<span class="ko">${esc(it.dlg.lines[it.i].ko)}</span>` : esc(it.key);
+    const q = nums.length === allNums().length ? '' : `?l=${nums.join(',')}`;
+    return `<section class="block mistakes"><h2 class="h">Мои ошибки</h2>
+      ${list.length ? `<div class="mist-list">${list.slice(0, 8).map((it) => `<div class="mist-row"><span>${label(it)}</span><span class="muted xs">ошибок: ${it.s.wrong}</span></div>`).join('')}</div>
+        <div class="row"><a class="btn" href="#/practice/mistakes${q}">Тренировать ошибки · ${list.length}</a></div>`
+        : '<p class="muted sm">Пока ошибок нет. Здесь появится то, в чём ты ошибаешься чаще всего.</p>'}</section>`;
+  }
+
   // ---------- Меню тренировки ----------
   let practiceNums = null;
   function practiceMenu(root) {
@@ -245,9 +274,10 @@
     const draw = () => {
       root.innerHTML = `<h1 class="page-title">Тренировка</h1>
         <div class="card"><div class="card-head"><h3>Какие уроки</h3><button class="link all">${practiceNums.length === allNums().length ? 'Снять все' : 'Выбрать все'}</button></div>
-          <div class="chips pick">${DB.lessons.map((l) => `<button class="chip ${practiceNums.includes(l.number) ? 'on' : ''}" data-n="${l.number}">${l.number}. ${esc(l.title)}</button>`).join('')}</div></div>
+          <div class="chips pick">${DB.lessons.map((l) => `<button class="chip ${practiceNums.includes(l.number) ? 'on' : ''}" data-n="${l.number}">제${l.number}과 · ${esc(l.title)}</button>`).join('')}</div></div>
         ${!TTS.available() ? `<div class="card warn">Корейский голос не найден, поэтому аудирование выключено. <a class="link" href="#/settings">Как включить →</a></div>` : ''}
-        ${practiceNums.length ? modeGrid(practiceNums) : '<p class="muted center">Выбери хотя бы один урок</p>'}`;
+        ${practiceNums.length ? modeGrid(practiceNums) : '<p class="muted center">Выбери хотя бы один урок</p>'}
+        ${practiceNums.length ? mistakesBlock(practiceNums) : ''}`;
       root.querySelectorAll('.pick .chip').forEach((b) => b.addEventListener('click', () => {
         const n = +b.dataset.n; practiceNums = practiceNums.includes(n) ? practiceNums.filter((x) => x !== n) : [...practiceNums, n].sort((a, b) => a - b); draw();
       }));
@@ -278,12 +308,19 @@
       <div class="card form">
         <h3>Тренировка</h3>
         <label class="field"><span>Цель: ответов в день</span><input type="number" min="5" max="300" step="5" value="${s.dailyGoal}" data-k="dailyGoal"></label>
-        <label class="field"><span>Задания с набором текста (нужна корейская раскладка)</span><input type="checkbox" data-k="typing" ${s.typing ? 'checked' : ''}></label>
+        <label class="field"><span>Задания с набором текста</span><input type="checkbox" data-k="typing" ${s.typing ? 'checked' : ''}></label>
+        <label class="field"><span>Экранная корейская клавиатура (выключи, если есть своя корейская раскладка)</span><input type="checkbox" data-k="keyboard" ${s.keyboard ? 'checked' : ''}></label>
       </div>
       <div class="card form">
         <h3>Прогресс</h3>
         <p class="sm muted">Прогресс хранится в этом браузере. Чтобы перенести его на другое устройство, сохрани файл и загрузи его там.</p>
         <div class="row"><button class="btn sm exp">Сохранить в файл</button><label class="btn sm ghost">Загрузить из файла<input type="file" accept=".json" class="imp" hidden></label><button class="btn sm danger rst">Сбросить</button></div>
+      </div>
+      <div class="card form">
+        <h3>Перенос на другое устройство</h3>
+        <p class="sm muted">Создай ссылку и открой её на другом устройстве: прогресс объединится с тем, что там уже есть. Ссылку никому не отправляй.</p>
+        <div class="row"><button class="btn sm mk-link">Создать ссылку</button></div>
+        <textarea class="xfer" readonly hidden></textarea>
       </div>
       <div class="card"><h3>Как поставить на телефон</h3><p class="sm">Открой сайт на телефоне. В Chrome: меню ⋮ → «Добавить на главный экран». В Safari: «Поделиться» → «На экран «Домой»». Приложение откроется без браузерной рамки и будет работать без интернета.</p></div>`;
     root.querySelector('[data-k="theme"]').value = s.theme;
@@ -300,7 +337,23 @@
       const f = e.target.files[0]; if (!f) return;
       try { Store.importJSON(await f.text()); UI.toast('Прогресс загружен'); applyTheme(); } catch (err) { UI.toast('Ошибка: ' + err.message); }
     });
+    root.querySelector('.mk-link').addEventListener('click', async () => {
+      const url = `${location.origin}${location.pathname}#/import/${await Store.pack()}`;
+      const ta = root.querySelector('.xfer'); ta.hidden = false; ta.value = url; ta.select();
+      if (navigator.share && matchMedia('(pointer: coarse)').matches) { navigator.share({ title: 'Мой корейский: прогресс', url }).catch(() => {}); return; }
+      try { await navigator.clipboard.writeText(url); UI.toast('Ссылка скопирована'); } catch { UI.toast('Скопируй ссылку из поля'); }
+    });
     root.querySelector('.rst').addEventListener('click', () => { if (confirm('Удалить весь прогресс на этом устройстве?')) { Store.reset(); UI.toast('Прогресс сброшен'); settings(root); } });
+  }
+
+  async function importLink(root, data) {
+    let other;
+    try { other = await Store.unpack(data); } catch { root.innerHTML = '<p class="empty">Ссылка повреждена — создай новую.</p>'; return; }
+    const n = Object.keys(other.items || {}).length, d = Object.keys(other.days || {}).length;
+    root.innerHTML = `<section class="card form"><h3>Перенос прогресса</h3>
+      <p>В ссылке: ${plural(n, 'задание', 'задания', 'заданий')} и ${plural(d, 'день', 'дня', 'дней')} занятий. Он объединится с прогрессом на этом устройстве — более свежие ответы победят.</p>
+      <div class="row"><button class="btn ok-imp">Перенести</button><a class="btn ghost" href="#/">Отмена</a></div></section>`;
+    root.querySelector('.ok-imp').addEventListener('click', () => { Store.merge(other); UI.toast('Прогресс перенесён'); location.hash = '#/'; });
   }
 
   function applyTheme() {
@@ -308,5 +361,5 @@
     if (t === 'auto') document.documentElement.removeAttribute('data-theme'); else document.documentElement.dataset.theme = t;
   }
 
-  window.Views = { home, lessons, lesson, dict, hangul, practiceMenu, settings, applyTheme };
+  window.Views = { home, lessons, lesson, dict, hangul, practiceMenu, settings, importLink, applyTheme };
 })();

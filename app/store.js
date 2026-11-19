@@ -5,7 +5,7 @@
   const INTERVALS = [0, 1, 2, 4, 8, 16, 32].map((d) => d * DAY); // по коробкам 0..6
   const MAX_BOX = INTERVALS.length - 1;
 
-  const empty = () => ({ items: {}, days: {}, settings: { rate: 0.85, dailyGoal: 30, romanize: true, typing: true, theme: 'auto' } });
+  const empty = () => ({ items: {}, days: {}, settings: { rate: 0.85, dailyGoal: 30, romanize: true, typing: true, keyboard: true, theme: 'auto' }, tests: {} });
   let state;
   try { state = Object.assign(empty(), JSON.parse(localStorage.getItem(KEY) || '{}')); } catch { state = empty(); }
   state.settings = Object.assign(empty().settings, state.settings);
@@ -50,8 +50,37 @@
     todayStats: () => state.days[today()] || { n: 0, ok: 0 },
     settings: () => state.settings,
     setSetting(k, v) { state.settings[k] = v; save(); },
+    getTest: (n) => state.tests?.[n] || null,
+    setTest(n, pct) {
+      state.tests = state.tests || {};
+      const prev = state.tests[n];
+      state.tests[n] = { best: Math.max(pct, prev?.best || 0), last: pct, date: today() }; save();
+    },
     exportJSON: () => JSON.stringify(state, null, 1),
-    importJSON(text) { const s = JSON.parse(text); if (!s.items) throw new Error('Не похоже на файл прогресса'); state = Object.assign(empty(), s); save(); },
+    importJSON(text) { const s = JSON.parse(text); if (!s.items) throw new Error('Не похоже на файл прогресса'); state = Object.assign(empty(), s); state.settings = Object.assign(empty().settings, s.settings); save(); },
+    // Объединить прогресс с другого устройства: по каждому заданию берём более свежий ответ
+    merge(other) {
+      if (!other || !other.items) throw new Error('Не похоже на прогресс');
+      for (const [k, it] of Object.entries(other.items)) { const mine = state.items[k]; if (!mine || (it.last || 0) > (mine.last || 0)) state.items[k] = it; }
+      for (const [d, v] of Object.entries(other.days || {})) { const m = state.days[d]; if (!m || v.n > m.n) state.days[d] = v; }
+      state.tests = state.tests || {};
+      for (const [n, t] of Object.entries(other.tests || {})) { const m = state.tests[n]; if (!m || t.best > m.best) state.tests[n] = t; }
+      save();
+    },
+    // Компактная строка для ссылки переноса (без настроек)
+    async pack() {
+      const json = JSON.stringify({ items: state.items, days: state.days, tests: state.tests || {} });
+      let bytes = new TextEncoder().encode(json), z = '0';
+      if (window.CompressionStream) { bytes = new Uint8Array(await new Response(new Blob([bytes]).stream().pipeThrough(new CompressionStream('gzip'))).arrayBuffer()); z = '1'; }
+      let bin = ''; bytes.forEach((b) => (bin += String.fromCharCode(b)));
+      return z + btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    },
+    async unpack(str) {
+      const z = str[0], b64 = str.slice(1).replace(/-/g, '+').replace(/_/g, '/');
+      let bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+      if (z === '1') bytes = new Uint8Array(await new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'))).arrayBuffer());
+      return JSON.parse(new TextDecoder().decode(bytes));
+    },
     reset() { state = empty(); save(); },
   };
 })();
