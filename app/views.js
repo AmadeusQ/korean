@@ -129,7 +129,11 @@
       if (k === 'photos') body.querySelectorAll('[data-photo]').forEach((a) => a.addEventListener('click', (e) => { e.preventDefault(); lightbox(photos, +a.dataset.photo); }));
       if (k === 'dialogues') body.querySelector('.hide-ru')?.addEventListener('change', (e) => body.classList.toggle('no-ru', e.target.checked));
     };
-    root.querySelectorAll('.tab').forEach((b) => b.addEventListener('click', () => show(b.dataset.tab)));
+    root.querySelectorAll('.tab').forEach((b) => b.addEventListener('click', () => { show(b.dataset.tab); b.scrollIntoView({ inline: 'center', block: 'nearest' }); }));
+    // затемнение у края показывает, что вкладки можно листать
+    const tabsEl = root.querySelector('.tabs');
+    const edge = () => { tabsEl.classList.toggle('more-r', tabsEl.scrollLeft + tabsEl.clientWidth < tabsEl.scrollWidth - 4); tabsEl.classList.toggle('more-l', tabsEl.scrollLeft > 4); };
+    tabsEl.addEventListener('scroll', edge, { passive: true }); edge();
     show('overview');
     // фото есть только в локальной версии: если их нет, вкладку не показываем
     if (photos.length) {
