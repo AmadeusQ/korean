@@ -61,8 +61,8 @@
           <section class="block">
             <h2 class="h">Четыре недели</h2>
             <div class="cal">${[...WEEK_KO].map((w) => `<span class="wd">${w}</span>`).join('')}
-              ${cal.map((d) => `<span class="c l${lvl(d)}" ${d ? `title="${d.date}: ${d.n}"` : ''}></span>`).join('')}</div>
-            <div class="cal-legend muted xs">меньше <span class="c l0"></span><span class="c l1"></span><span class="c l2"></span><span class="c l3"></span> больше</div>
+              ${cal.map((d) => `<span class="c l${lvl(d)}" ${d ? `title="${d.date}: ${d.n}"` : ''}>${lvl(d) === 3 ? '<b>참</b>' : ''}</span>`).join('')}</div>
+            <div class="cal-legend muted xs">меньше <span class="c l0"></span><span class="c l1"></span><span class="c l2"></span> больше · <span class="c l3"><b>참</b></span> цель выполнена</div>
           </section>
 
         </div>

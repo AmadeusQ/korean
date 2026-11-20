@@ -9,14 +9,14 @@
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --paper: #151410; --sheet: #1c1b17; --ink: #ebe5d7; --ink-2: #c9c2b2; --muted: #9a9282; --line: #36322b; --line-2: #2a2722;
-    --grid: rgba(226, 98, 82, .22); --grid-soft: rgba(226, 98, 82, .08);
+    --paper: #17140f; --sheet: #1e1a14; --ink: #ede4d2; --ink-2: #cbbfa8; --muted: #9c917c; --line: #3a3329; --line-2: #2c261f;
+    --grid: rgba(226, 98, 82, .22); --grid-soft: rgba(226, 98, 82, .06);
     --red: #de5f50; --red-soft: #3a211c; --green: #7fb08c; --green-soft: #1f2c22; --blue: #86b2d4; color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
-  --paper: #151410; --sheet: #1c1b17; --ink: #ebe5d7; --ink-2: #c9c2b2; --muted: #9a9282; --line: #36322b; --line-2: #2a2722;
-  --grid: rgba(226, 98, 82, .22); --grid-soft: rgba(226, 98, 82, .08);
+  --paper: #17140f; --sheet: #1e1a14; --ink: #ede4d2; --ink-2: #cbbfa8; --muted: #9c917c; --line: #3a3329; --line-2: #2c261f;
+  --grid: rgba(226, 98, 82, .22); --grid-soft: rgba(226, 98, 82, .06);
   --red: #de5f50; --red-soft: #3a211c; --green: #7fb08c; --green-soft: #1f2c22; --blue: #86b2d4; color-scheme: dark;
 }
 
@@ -138,7 +138,9 @@ body.in-session .topbar { display: none; }
 .c { aspect-ratio: 1; border: 1px solid var(--line); display: block; }
 .c.l1 { background: color-mix(in srgb, var(--red) 25%, var(--sheet)); border-color: transparent; }
 .c.l2 { background: color-mix(in srgb, var(--red) 55%, var(--sheet)); border-color: transparent; }
-.c.l3 { background: var(--red); border-color: var(--red); }
+.c.l3 { background: transparent; border-color: transparent; display: grid; place-items: center; }
+.c.l3 b { width: 86%; aspect-ratio: 1; border-radius: 50%; border: 2px solid var(--red); color: var(--red); display: grid; place-items: center; font: 700 clamp(10px, 2.4vw, 15px)/1 var(--serif); transform: rotate(-12deg); opacity: .9; }
+.cal-legend .c.l3 { width: 18px; } .cal-legend .c.l3 b { font-size: 9px; border-width: 1.5px; }
 .c.lf { border-style: dashed; opacity: .4; }
 .cal-legend { display: flex; gap: 4px; align-items: center; margin-top: 10px; } .cal-legend .c { width: 11px; }
 .last-lesson { display: flex; flex-direction: column; gap: 2px; padding-bottom: 10px; }
@@ -162,7 +164,10 @@ body.in-session .topbar { display: none; }
 .pbar { flex: 1; height: 4px; background: var(--line-2); overflow: hidden; } .pbar i { display: block; height: 100%; background: var(--green); }
 .back { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); margin-bottom: 16px; font-size: 14px; }
 .back .ic { width: 16px; height: 16px; }
-.lesson-head { margin-bottom: 24px; } .lesson-head .row { margin-top: 14px; }
+.lesson-head { display: grid; grid-template-columns: auto 1fr; column-gap: 22px; margin-bottom: 26px; }
+.lesson-head .kicker.lg { grid-row: 1 / span 3; writing-mode: vertical-rl; text-orientation: upright; font-size: 30px; letter-spacing: .08em; padding: 4px 18px 4px 0; margin: 0; border-right: 1px solid var(--red); align-self: stretch; }
+.lesson-head h1 { margin-bottom: 4px; } .lesson-head .row { margin-top: 14px; }
+@media (max-width: 520px) { .lesson-head .kicker.lg { font-size: 22px; padding-right: 12px; } .lesson-head { column-gap: 14px; } }
 .tabs { display: flex; gap: 22px; overflow-x: auto; margin-bottom: 20px; border-bottom: 1px solid var(--line); scrollbar-width: none; }
 .tab { flex: none; padding: 10px 0; border: 0; border-bottom: 2px solid transparent; margin-bottom: -1px; background: none; color: var(--muted); font-size: 15px; }
 .tab:hover { color: var(--ink); } .tab.on { color: var(--ink); border-bottom-color: var(--red); }
@@ -235,7 +240,11 @@ body.in-session .topbar { display: none; }
 .segs i { flex: 1; height: 6px; background: var(--line); }
 .segs i.ok { background: var(--green); } .segs i.bad { background: var(--red); } .segs i.cur { background: var(--ink); }
 .s-count { font-size: 14px; color: var(--muted); font-variant-numeric: tabular-nums; min-width: 48px; text-align: right; }
-.s-body { flex: 1; animation: rise .2s ease; }
+.s-body { flex: 1; }
+.s-body.enter { animation: pageIn .22s ease-out; }
+.s-body.leave, .s-foot.leave { transition: transform .14s ease-in, opacity .14s ease-in; transform: translateX(-28px); opacity: 0; }
+@keyframes pageIn { from { opacity: 0; transform: translateX(28px); } }
+@media (prefers-reduced-motion: reduce) { .s-body.enter, .stamp, .sheet, .s-foot.show { animation: none; } .s-body.leave, .s-foot.leave { transition: none; } }
 @keyframes rise { from { opacity: 0; transform: translateY(6px); } }
 .q-label { font-size: 14px; color: var(--muted); margin-bottom: 12px; }
 .q-prompt { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 34px 16px; margin-bottom: 22px; background: var(--sheet); border: 1px solid var(--line); text-align: center;
@@ -384,3 +393,19 @@ textarea.xfer { width: 100%; margin-top: 10px; min-height: 70px; font: 12px/1.4 
 .form input[type="range"] { accent-color: var(--red); width: 160px; }
 .form input[type="number"] { width: 90px; }
 details { margin: 8px 0; font-size: 14px; } summary { cursor: pointer; color: var(--red); }
+
+/* тренировка на телефоне: задание сверху, ответы ближе к большому пальцу */
+@media (max-width: 520px) {
+  .session { min-height: calc(100dvh - 44px); }
+  .s-body { display: flex; flex-direction: column; }
+  .s-body > .opts, .s-body > .build-bank, .s-body > .speak, .s-body > .kb { margin-top: auto; }
+  .s-top { margin-bottom: 20px; }
+  .q-prompt { padding: 26px 12px; }
+  .pair { min-height: 62px; } .pair.ko { font-size: 24px; } .pair:not(.ko) { font-size: 15px; }
+}
+
+/* тёмная тема: тушь на чёрной бумаге, еле заметная клетка 원고지 */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) body { background-image: linear-gradient(var(--grid-soft) 1px, transparent 1px), linear-gradient(90deg, var(--grid-soft) 1px, transparent 1px); background-size: 32px 32px; background-attachment: fixed; }
+}
+:root[data-theme="dark"] body { background-image: linear-gradient(var(--grid-soft) 1px, transparent 1px), linear-gradient(90deg, var(--grid-soft) 1px, transparent 1px); background-size: 32px 32px; background-attachment: fixed; }

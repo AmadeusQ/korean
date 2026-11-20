@@ -434,7 +434,21 @@
       $foot.querySelector('.next').addEventListener('click', () => { marks[idx] = 'intro'; idx++; next(); });
     }
 
+    // Перелистывание: текущая страница уходит влево, новая въезжает справа
+    let turning = false;
     function next() {
+      if (turning) return;
+      const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+      if (!$body.firstChild || reduce) return show();
+      turning = true;
+      $body.classList.add('leave'); $foot.classList.add('leave');
+      setTimeout(() => {
+        turning = false; $body.classList.remove('leave'); $foot.classList.remove('leave');
+        show();
+        $body.classList.remove('enter'); void $body.offsetWidth; $body.classList.add('enter');
+      }, 140);
+    }
+    function show() {
       if (idx >= queue.length || timeUp) return finish();
       const it = queue[idx];
       if (introOk && it.entry && it.group === 'words' && !Store.get(it.key) && !introduced.has(it.key) && introCount < 5) {
