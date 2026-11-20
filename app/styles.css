@@ -26,6 +26,11 @@
 
 * { box-sizing: border-box; }
 html { -webkit-text-size-adjust: 100%; }
+/* анимации (печать, перелистывание) не должны расширять страницу: иначе телефон уменьшает масштаб */
+html, body { overflow-x: clip; }
+/* без приближения двойным тапом (мешает быстрым ответам); масштаб двумя пальцами остаётся */
+html { touch-action: manipulation; }
+main, .session, .today { overflow-x: clip; }
 body { margin: 0; font: 16px/1.55 var(--sans); color: var(--ink); background: var(--paper); min-height: 100vh; }
 a { color: inherit; text-decoration: none; }
 button, input, select { font: inherit; color: inherit; }
@@ -113,7 +118,7 @@ body.in-session .topbar { display: none; }
 .stamp { width: 92px; height: 92px; flex: none; border: 3px solid var(--red); border-radius: 50%; display: grid; place-items: center; color: var(--red); transform: rotate(-12deg); opacity: .88; animation: stamp .35s ease-out; }
 .stamp span { font: 700 17px/1.15 var(--serif); width: 3.2em; text-align: center; word-break: keep-all; }
 .stamp.lg { width: 140px; height: 140px; border-width: 4px; } .stamp.lg span { font-size: 26px; }
-@keyframes stamp { from { transform: rotate(-12deg) scale(1.6); opacity: 0; } }
+@keyframes stamp { from { transform: rotate(-12deg) scale(1.25); opacity: 0; } }
 
 /* ---------- главная ---------- */
 .today { display: flex; justify-content: space-between; gap: 24px; align-items: flex-start; padding-bottom: 28px; margin-bottom: 28px; border-bottom: 1px solid var(--line); }
