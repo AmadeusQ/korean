@@ -3,7 +3,7 @@ from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 
 ROOT = Path(__file__).resolve().parent.parent
-PAPER, RED, GRID = (243, 238, 227), (176, 55, 43), (176, 55, 43, 36)
+PAPER, SEAL, GRID = (244, 239, 230), (63, 122, 107), (120, 90, 60, 36)  # бумага, нефритовая печать, клетка
 FONT = 'C:/Windows/Fonts/malgunbd.ttf'
 
 
@@ -25,7 +25,7 @@ def icon(size: int, maskable: bool = False) -> Image.Image:
     d = ImageDraw.Draw(seal)
     c = big / 2
     h = 170 * k * sc
-    d.rounded_rectangle([c - h, c - h, c + h, c + h], radius=34 * k * sc, fill=RED)
+    d.rounded_rectangle([c - h, c - h, c + h, c + h], radius=34 * k * sc, fill=SEAL)
     i = 144 * k * sc
     d.rounded_rectangle([c - i, c - i, c + i, c + i], radius=20 * k * sc, outline=PAPER, width=max(2, int(10 * k * sc)))
     font = ImageFont.truetype(FONT, int(200 * k * sc))

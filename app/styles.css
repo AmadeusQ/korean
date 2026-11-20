@@ -1,6 +1,6 @@
 /* Корейская тетрадь: бумага, тушь, красная печать, клетка 원고지. Тонкие линии вместо теней. */
 :root {
-  /* «Ханок»: тёплое дерево, бумага ханджи, нефритовый акцент. Красный — только печати 도장 и ошибки. */
+  /* «Ханок»: тёплое дерево, бумага ханджи, нефритовый акцент. Тёмная тема — «ночное небо» (сине-серый, как тушь). Красный — только печати 도장 и ошибки. */
   --paper: #f4efe6; --sheet: #fbf8f2; --ink: #3a2a1f; --ink-2: #5d4a3b; --muted: #8b7b69; --line: #e4dccd; --line-2: #ece5d8;
   --accent: #3f7a6b; --accent-2: #346658; --accent-soft: #dfeae5; --on-accent: #f8f5ee;
   --grid: rgba(120, 90, 60, .18); --grid-soft: rgba(120, 90, 60, .07);
@@ -11,17 +11,17 @@
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --paper: #1a1612; --sheet: #231e18; --ink: #ede3d3; --ink-2: #cdbfa9; --muted: #a09079; --line: #3a3128; --line-2: #2d2620;
-    --accent: #74b3a1; --accent-2: #8cc4b3; --accent-soft: #1f322c; --on-accent: #14110d;
-    --grid: rgba(220, 190, 150, .16); --grid-soft: rgba(220, 190, 150, .06);
-    --red: #de7a62; --red-soft: #3b231c; --green: #74b3a1; --green-soft: #1f322c; --blue: #8fb6d4; color-scheme: dark;
+    --paper: #13171c; --sheet: #1b2128; --ink: #e3e7ec; --ink-2: #c3cad3; --muted: #8b95a1; --line: #283039; --line-2: #20272f;
+    --accent: #7cc0ab; --accent-2: #94cfbc; --accent-soft: #1b2f2b; --on-accent: #0f1317;
+    --grid: rgba(180, 200, 220, .14); --grid-soft: rgba(180, 200, 220, .05);
+    --red: #e07a68; --red-soft: #3a2326; --green: #7cc0ab; --green-soft: #1b2f2b; --blue: #8fb6d4; color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
-  --paper: #1a1612; --sheet: #231e18; --ink: #ede3d3; --ink-2: #cdbfa9; --muted: #a09079; --line: #3a3128; --line-2: #2d2620;
-  --accent: #74b3a1; --accent-2: #8cc4b3; --accent-soft: #1f322c; --on-accent: #14110d;
-  --grid: rgba(220, 190, 150, .16); --grid-soft: rgba(220, 190, 150, .06);
-  --red: #de7a62; --red-soft: #3b231c; --green: #74b3a1; --green-soft: #1f322c; --blue: #8fb6d4; color-scheme: dark;
+  --paper: #13171c; --sheet: #1b2128; --ink: #e3e7ec; --ink-2: #c3cad3; --muted: #8b95a1; --line: #283039; --line-2: #20272f;
+  --accent: #7cc0ab; --accent-2: #94cfbc; --accent-soft: #1b2f2b; --on-accent: #0f1317;
+  --grid: rgba(180, 200, 220, .14); --grid-soft: rgba(180, 200, 220, .05);
+  --red: #e07a68; --red-soft: #3a2326; --green: #7cc0ab; --green-soft: #1b2f2b; --blue: #8fb6d4; color-scheme: dark;
 }
 
 * { box-sizing: border-box; }

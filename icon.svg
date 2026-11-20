@@ -1,12 +1,12 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <!-- бумага с клеткой 원고지 и красный оттиск печати 도장 -->
-  <rect width="512" height="512" rx="96" fill="#f3eee3"/>
-  <g stroke="#b0372b" stroke-opacity=".14" stroke-width="3">
+  <!-- бумага ханджи с клеткой 원고지 и нефритовая печать 도장 -->
+  <rect width="512" height="512" rx="96" fill="#f4efe6"/>
+  <g stroke="#785a3c" stroke-opacity=".14" stroke-width="3">
     <path d="M0 128h512M0 256h512M0 384h512M128 0v512M256 0v512M384 0v512"/>
   </g>
   <g transform="rotate(-8 256 256)">
-    <rect x="86" y="86" width="340" height="340" rx="34" fill="#b0372b"/>
-    <rect x="112" y="112" width="288" height="288" rx="20" fill="none" stroke="#f3eee3" stroke-width="10"/>
-    <text x="256" y="338" font-family="Noto Serif KR, Batang, serif" font-weight="700" font-size="220" text-anchor="middle" fill="#f3eee3">한</text>
+    <rect x="86" y="86" width="340" height="340" rx="34" fill="#3f7a6b"/>
+    <rect x="112" y="112" width="288" height="288" rx="20" fill="none" stroke="#f4efe6" stroke-width="10"/>
+    <text x="256" y="338" font-family="Noto Serif KR, Batang, serif" font-weight="700" font-size="220" text-anchor="middle" fill="#f4efe6">한</text>
   </g>
 </svg>
