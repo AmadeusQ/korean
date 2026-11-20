@@ -2,7 +2,8 @@
 (function () {
   const { esc, icon, sayBtn, strength } = UI;
   const H = Hangul;
-  const allNums = () => DB.lessons.map((l) => l.number);
+  const allNums = () => DB.allNums();
+  const lessonName = (n) => (n === 0 ? 'Мои слова' : `제${n}과`);
   const avgMastery = (keys) => {
     if (!keys.length) return 0;
     return keys.reduce((s, k) => s + Math.max(0, Store.box(k)), 0) / (keys.length * Store.MAX_BOX);
@@ -17,6 +18,7 @@
     const st = Store.todayStats(), goal = Store.settings().dailyGoal;
     const keys = DB.entries.map((e) => e.key);
     const due = dueCount(), streak = Store.streak();
+    const tomorrow = Store.forecastTomorrow(keys);
     const now = new Date();
     const koDate = `${now.getMonth() + 1}월 ${now.getDate()}일 ${'일월화수목금토'[now.getDay()]}요일`;
     // календарь за 4 недели, столбцы — дни недели с понедельника
@@ -36,7 +38,7 @@
           <div class="goal-cells" aria-label="Цель дня">${Array.from({ length: CELLS }, (_, i) => `<span class="${i < filled ? 'on' : ''}"></span>`).join('')}</div>
           <div class="row">
             <a class="btn" href="#/practice/mix">Начать тренировку</a>
-            <span class="muted sm">${due ? `${plural(due, 'слово ждёт', 'слова ждут', 'слов ждут')} повторения` : 'Повторять пока нечего — можно учить новое'}</span>
+            <span class="muted sm">${due ? `${plural(due, 'слово ждёт', 'слова ждут', 'слов ждут')} повторения` : 'Повторять пока нечего — можно учить новое'}${tomorrow ? ` · завтра ещё ${tomorrow}` : ''}</span>
           </div>
         </div>
         ${st.n >= goal ? UI.stamp('참 잘했어요') : ''}
@@ -197,12 +199,17 @@
       <div class="sheet-head">${UI.cells(e.ko, 'big')}${sayBtn(e.ko)}</div>
       <div class="rr sheet-rr">${esc(H.romanize(e.ko))}</div>
       <div class="sheet-ru">${esc(e.ru)}</div>
-      <div class="muted sm">${esc(e.c)} · ${e.lessons.map((n) => `<a class="link" href="#/lesson/${n}">${n}과</a>`).join(', ')}</div>
+      <div class="muted sm">${esc(e.c)} · ${e.lessons.map((n) => (n === 0 ? 'мои слова' : `<a class="link" href="#/lesson/${n}">${n}과</a>`)).join(', ')}</div>
       <div class="sheet-stats">${s ? `${strength(e.key)} <span class="sm">верно ${s.right}, ошибок ${s.wrong}</span>` : '<span class="sm muted">Ещё не тренировалось</span>'}</div>
+      ${e.mine ? '<button class="btn sm danger del-word" type="button">Удалить из моих слов</button>' : ''}
       ${ex.length ? `<h2 class="h">Встречается во фразах</h2>${ex.map((l) => `<div class="exm"><div><span class="ko">${esc(l.ko)}</span><div class="muted sm">${esc(l.ru)}</div></div>${sayBtn(l.ko, 'sm')}</div>`).join('')}` : ''}
     </div>`;
     const close = () => { box.remove(); document.removeEventListener('keydown', key); };
     const key = (ev) => { if (ev.key === 'Escape') close(); };
+    box.querySelector('.del-word')?.addEventListener('click', () => {
+      if (!confirm(`Удалить «${e.ko}» из своих слов?`)) return;
+      DB.removeCustom(e.ko); close(); UI.toast('Удалено'); if (location.hash.startsWith('#/dict')) dict(document.getElementById('view'));
+    });
     box.addEventListener('click', (ev) => { if (ev.target === box || ev.target.closest('.sheet-x') || ev.target.closest('a')) close(); });
     document.addEventListener('keydown', key);
     document.body.appendChild(box);
@@ -213,17 +220,41 @@
     const e = DB.byKo.get(r.dataset.ko); if (e) wordSheet(e);
   });
 
+  // Правило грамматики по кнопке «Правило →» из разбора ответа
+  function ruleSheet(id) {
+    const g = DB.grammar(DB.allNums()).find((x) => x.id === id); if (!g) return;
+    document.querySelectorAll('.sheet-wrap').forEach((x) => x.remove());
+    const box = document.createElement('div'); box.className = 'sheet-wrap';
+    box.innerHTML = `<div class="sheet grammar" role="dialog"><button class="icon-btn sheet-x" aria-label="Закрыть">${icon('close')}</button>
+      <div class="g-head"><h3 class="serif">${esc(g.title)}</h3><span class="muted">${esc(g.short || '')}</span></div>
+      ${g.body.map((p) => `<p>${p}</p>`).join('')}
+      <div class="examples">${g.examples.map((x) => `<div class="exm"><div><span class="ko">${esc(x.ko)}</span><div class="muted sm">${esc(x.ru)}</div></div>${sayBtn(x.ko, 'sm')}</div>`).join('')}</div></div>`;
+    const close = () => { box.remove(); document.removeEventListener('keydown', key, true); };
+    const key = (ev) => { if (ev.key === 'Escape') { ev.stopPropagation(); close(); } };
+    box.addEventListener('click', (ev) => { if (ev.target === box || ev.target.closest('.sheet-x')) close(); });
+    document.addEventListener('keydown', key, true);
+    document.body.appendChild(box);
+  }
+  document.addEventListener('click', (ev) => { const b = ev.target.closest('[data-rule]'); if (b) { ev.preventDefault(); ruleSheet(b.dataset.rule); } });
+
   // ---------- Словарь ----------
   const dictState = { q: '', lesson: 'all', cat: 'all', sort: 'lesson' };
   function dict(root) {
     root.innerHTML = `<h1 class="page-title">Словарь <span class="muted count"></span></h1>
       <div class="filters">
         <input class="search" type="search" placeholder="Поиск: 학생, студент, hakseng…" value="${esc(dictState.q)}">
-        <select class="f-lesson"><option value="all">Все уроки</option>${DB.lessons.map((l) => `<option value="${l.number}">제${l.number}과</option>`).join('')}</select>
+        <select class="f-lesson"><option value="all">Все уроки</option>${DB.lessons.map((l) => `<option value="${l.number}">제${l.number}과</option>`).join('')}<option value="0">Мои слова</option></select>
         <select class="f-cat"><option value="all">Все темы</option>${DB.categories().map((c) => `<option>${esc(c)}</option>`).join('')}</select>
         <select class="f-sort"><option value="lesson">По урокам</option><option value="abc">По алфавиту</option><option value="weak">Сначала слабые</option></select>
       </div>
-      <div class="row dict-actions"><a class="btn sm ghost" id="dict-cards" href="#/practice/cards">Карточки по этой выборке</a></div>
+      <div class="row dict-actions"><a class="btn sm ghost" id="dict-cards" href="#/practice/cards">Карточки по этой выборке</a><button class="btn sm ghost add-word" type="button">+ Своё слово</button></div>
+      <form class="card form add-form" hidden>
+        <h3>Новое слово</h3>
+        <label class="field"><span>По-корейски</span><input class="aw-ko" lang="ko" required autocomplete="off" placeholder="한글로…"></label>
+        <label class="field"><span>Перевод</span><input class="aw-ru" required autocomplete="off" placeholder="по-русски"></label>
+        <label class="field"><span>Тема</span><select class="aw-c">${['Мои слова', ...DB.categories().filter((c) => c !== 'Мои слова')].map((c) => `<option>${esc(c)}</option>`).join('')}</select></label>
+        <div class="row"><button class="btn sm">Добавить</button><button class="btn sm ghost aw-cancel" type="button">Отмена</button></div>
+      </form>
       <div class="card list dict-list"></div>`;
     const $ = (s) => root.querySelector(s);
     $('.f-lesson').value = dictState.lesson; $('.f-cat').value = dictState.cat; $('.f-sort').value = dictState.sort;
@@ -238,9 +269,9 @@
       $('.count').textContent = list.length;
       $('#dict-cards').href = `#/practice/cards${dictState.lesson === 'all' ? '' : '?l=' + dictState.lesson}`;
       const row = (e) => `<div class="wrow" data-ko="${esc(e.ko)}"><div class="w-ko"><span class="ko serif">${esc(e.ko)}</span>${UI.rr(e.ko)}</div>
-        <div class="w-ru">${esc(e.ru)}<div class="w-meta">${esc(e.c)} · ${e.lessons.map((n) => `${n}과`).join(', ')}</div></div>${strength(e.key)}${sayBtn(e.ko, 'sm')}</div>`;
+        <div class="w-ru">${esc(e.ru)}<div class="w-meta">${esc(e.c)} · ${e.lessons.map((n) => (n === 0 ? 'мои' : `${n}과`)).join(', ')}</div></div>${strength(e.key)}${sayBtn(e.ko, 'sm')}</div>`;
       const groupOf = dictState.sort === 'abc' ? (e) => { const d = H.decompose(e.ko[0]); return d ? d.cho : e.ko[0]; }
-        : dictState.sort === 'lesson' ? (e) => `제${e.lesson}과` : null;
+        : dictState.sort === 'lesson' ? (e) => lessonName(e.lesson) : null;
       if (dictState.sort === 'lesson') list = list.slice().sort((a, b) => a.lesson - b.lesson);
       let html = '', prev = null;
       for (const e of list) { const g = groupOf && groupOf(e); if (g && g !== prev) { html += `<div class="dgroup serif">${esc(g)}</div>`; prev = g; } html += row(e); }
@@ -251,6 +282,18 @@
     $('.f-lesson').addEventListener('change', (e) => { dictState.lesson = e.target.value; draw(); });
     $('.f-cat').addEventListener('change', (e) => { dictState.cat = e.target.value; draw(); });
     $('.f-sort').addEventListener('change', (e) => { dictState.sort = e.target.value; draw(); });
+    const form = $('.add-form');
+    $('.add-word').addEventListener('click', () => { form.hidden = !form.hidden; if (!form.hidden) $('.aw-ko').focus(); });
+    $('.aw-cancel').addEventListener('click', () => { form.hidden = true; });
+    Keyboard.attach(form, $('.aw-ko'), () => {}, false);
+    form.addEventListener('submit', (ev) => {
+      ev.preventDefault();
+      const ko = $('.aw-ko').value.trim(), ru = $('.aw-ru').value.trim();
+      if (!ko || !ru) return;
+      if (!/[가-힣]/.test(ko)) { UI.toast('Слово должно быть по-корейски (можно печатать gkrtod → 학생)'); return; }
+      DB.addCustom({ ko, ru, c: $('.aw-c').value });
+      UI.toast(`Добавлено: ${ko}`); $('.aw-ko').value = ''; $('.aw-ru').value = ''; $('.aw-ko').focus(); draw();
+    });
     draw();
   }
 
@@ -313,7 +356,7 @@
     const draw = () => {
       root.innerHTML = `<h1 class="page-title">Тренировка</h1>
         <div class="card"><div class="card-head"><h3>Какие уроки</h3><button class="link all">${practiceNums.length === allNums().length ? 'Снять все' : 'Выбрать все'}</button></div>
-          <div class="chips pick">${DB.lessons.map((l) => `<button class="chip ${practiceNums.includes(l.number) ? 'on' : ''}" data-n="${l.number}">제${l.number}과 · ${esc(l.title)}</button>`).join('')}</div></div>
+          <div class="chips pick">${DB.lessons.map((l) => `<button class="chip ${practiceNums.includes(l.number) ? 'on' : ''}" data-n="${l.number}">제${l.number}과 · ${esc(l.title)}</button>`).join('')}${Store.custom().length ? `<button class="chip ${practiceNums.includes(0) ? 'on' : ''}" data-n="0">Мои слова · ${Store.custom().length}</button>` : ''}</div></div>
         ${!TTS.available() ? `<div class="card warn">Корейский голос не найден, поэтому аудирование выключено. <a class="link" href="#/settings">Как включить →</a></div>` : ''}
         ${practiceNums.length ? modeGrid(practiceNums) : '<p class="muted center">Выбери хотя бы один урок</p>'}
         ${practiceNums.length ? mistakesBlock(practiceNums) : ''}`;

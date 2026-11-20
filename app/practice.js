@@ -10,7 +10,11 @@
     listen: { title: 'Аудирование', desc: 'Услышь и выбери, что прозвучало', ex: '듣기', tts: true },
     hangul: { title: 'Хангыль', desc: 'Буквы, слоги и патчим', ex: 'ㄱ+ㅏ' },
     grammar: { title: 'Грамматика', desc: '이에요 / 예요 и 은 / 는', ex: '-예요' },
-    build: { title: 'Собери фразу', desc: 'Расставь слова по порядку', ex: '저는…' },
+    build: { title: 'Фразы', desc: 'Собери фразу и вставь пропущенное слово', ex: '저는…' },
+    match: { title: 'Найди пары', desc: 'Соедини слова с переводом на время', ex: '짝' },
+    timed: { title: '5 минут', desc: 'Сколько успеешь за пять минут', ex: '5분' },
+    numbers: { title: 'Числа', desc: '일, 이, 삼 и 하나, 둘, 셋', ex: '123' },
+    shadow: { title: 'Повтори за диктором', desc: 'Послушай фразу и скажи её вслух', ex: '따라', mic: true },
     dialog: { title: 'Ролевой диалог', desc: 'Отвечай за собеседника по ходу разговора', ex: '대화' },
     write: { title: 'Прописи', desc: 'Пиши буквы и слова в клетках', ex: '쓰기' },
     speak: { title: 'Произношение', desc: 'Скажи слово вслух в микрофон', ex: '말하기', mic: true },
@@ -46,6 +50,10 @@
         .map((e) => ({ group: 'speak', key: 'speak:' + e.ko, types: ['speak'], entry: e })) : [];
     }
     if (mode === 'dialog') return dialogLines(nums);
+    if (mode === 'timed') return buildPool('mix', nums);
+    if (mode === 'match') return buildPool('words', nums).filter((it) => it.entry.kind === 'word' && [...it.entry.ko].length <= 6);
+    if (mode === 'numbers') return ['s', 'n'].flatMap((sys) => Numbers.sample(sys, 12).map((n) => ({ group: 'numbers', key: `num:${sys}:${n}`, types: TTS.available() ? ['num-read', 'num-value', 'num-listen'] : ['num-read', 'num-value'], sys, n })));
+    if (mode === 'shadow') return micSupported() ? sentenceLines(nums).map((l) => ({ group: 'build', key: 'shadow:' + l.ko, types: ['shadow'], line: l })) : [];
     const tts = TTS.available();
     const typing = Store.settings().typing;
     const entries = DB.entriesFor(nums);
@@ -92,16 +100,34 @@
       }
     }
     if (['mix', 'build'].includes(mode)) {
-      const lines = [
-        ...entries.filter((e) => e.kind === 'phrase').map((e) => ({ ko: e.ko, ru: e.ru, key: e.key })),
-        ...DB.dialogues(nums).flatMap((d) => d.lines.map((l) => ({ ko: l.ko, ru: l.ru, key: 'd:' + l.ko }))),
-        ...DB.grammar(nums).flatMap((g) => g.examples.map((x) => ({ ko: x.ko, ru: x.ru, key: 'd:' + x.ko }))),
-      ];
-      uniqBy(lines, (l) => l.ko).filter((l) => l.ko.trim().split(/\s+/).length >= 2)
-        .forEach((l) => add('build', 'build:' + l.ko, ['build'], { line: l }));
+      const lines = sentenceLines(nums);
+      lines.forEach((l) => add('build', 'build:' + l.ko, ['build'], { line: l }));
+      lines.forEach((l) => { const c = clozeTarget(l); if (c) add('build', 'cloze:' + l.ko, ['cloze'], { line: l, ...c }); });
       if (mode === 'mix') pool.push(...dialogLines(nums));
     }
     return uniqBy(pool, (p) => p.key);
+  }
+
+  // фразы из уроков, диалогов и примеров грамматики (от двух слов)
+  function sentenceLines(nums) {
+    const lines = [
+      ...DB.entriesFor(nums).filter((e) => e.kind === 'phrase').map((e) => ({ ko: e.ko, ru: e.ru })),
+      ...DB.dialogues(nums).flatMap((d) => d.lines.map((l) => ({ ko: l.ko, ru: l.ru }))),
+      ...DB.grammar(nums).flatMap((g) => g.examples.map((x) => ({ ko: x.ko, ru: x.ru }))),
+    ];
+    return uniqBy(lines, (l) => l.ko).filter((l) => l.ko.trim().split(/\s+/).length >= 2);
+  }
+  // какое слово из словаря можно убрать из фразы: 학생이에요 → ＿＿이에요 (학생)
+  function clozeTarget(l) {
+    const tokens = l.ko.split(/\s+/); let best = null;
+    tokens.forEach((t, i) => {
+      const bare = t.replace(/[.,!?]/g, '');
+      DB.entries.forEach((e) => {
+        if (e.kind !== 'word' || !bare.startsWith(e.ko) || [...e.ko].length < (bare === e.ko ? 1 : 2)) return;
+        if (!best || e.ko.length > best.entry.ko.length) best = { entry: e, ti: i };
+      });
+    });
+    return best;
   }
 
   // реплики диалогов (кроме первой): ответить за собеседника
@@ -141,6 +167,8 @@
     }
     return out;
   }
+  const numExplain = (it) => { const S = Numbers.SYSTEMS[it.sys]; const r = S.read(it.n); return `<div class="ex-line"><b>${it.n}</b> = <span class="ko">${r}</span>${sayBtn(r, 'sm')}</div><div class="ex-ru">${S.title}: ${S.use}</div>`; };
+  const ruleBtn = (id) => `<button type="button" class="link" data-rule="${id}">Правило →</button>`;
   const entryExplain = (e) => `<div class="ex-line"><span class="ko">${esc(e.ko)}</span>${UI.rr(e.ko)}${sayBtn(e.ko, 'sm')}</div><div class="ex-ru">${esc(e.ru)}</div>`;
   const sameKind = (e) => DB.entries.filter((x) => x.kind === e.kind);
   const lenNear = (e) => sameKind(e).filter((x) => Math.abs([...x.ko].length - [...e.ko].length) <= 1);
@@ -233,13 +261,13 @@
       const e = it.entry; const ok = H.copula(e.ko);
       return { kind: 'choice', label: 'Выбери окончание', prompt: `<span class="cells big">${[...e.ko].map((c) => `<span class="cell">${esc(c)}</span>`).join('')}<span class="cell blank-cell">?</span></span><div class="hint">«это ${esc(e.ru)}»</div>`,
         options: ['이에요', '예요'].map((x) => ({ text: x, ok: x === ok, ko: true })), sayAfter: e.ko + ok,
-        explain: `<div class="ex-line">${esc(e.ko)} кончается на ${H.hasBatchim(e.ko) ? 'согласную → <b>이에요</b>' : 'гласную → <b>예요</b>'}</div><div class="ex-line"><span class="ko">${esc(e.ko + ok)}</span>${sayBtn(e.ko + ok, 'sm')}</div>` };
+        explain: `<div class="ex-line">${esc(e.ko)} кончается на ${H.hasBatchim(e.ko) ? 'согласную → <b>이에요</b>' : 'гласную → <b>예요</b>'}</div><div class="ex-line"><span class="ko">${esc(e.ko + ok)}</span>${sayBtn(e.ko + ok, 'sm')}</div>${ruleBtn('copula')}` };
     },
     topic(it) {
       const e = it.entry; const ok = H.topic(e.ko);
       return { kind: 'choice', label: 'Выбери частицу темы', prompt: `<span class="cells big">${[...e.ko].map((c) => `<span class="cell">${esc(c)}</span>`).join('')}<span class="cell blank-cell">?</span></span><div class="hint">${esc(e.ru)}</div>`,
         options: ['은', '는'].map((x) => ({ text: x, ok: x === ok, ko: true })), sayAfter: e.ko + ok,
-        explain: `<div class="ex-line">${esc(e.ko)} кончается на ${H.hasBatchim(e.ko) ? 'согласную → <b>은</b>' : 'гласную → <b>는</b>'}</div>` };
+        explain: `<div class="ex-line">${esc(e.ko)} кончается на ${H.hasBatchim(e.ko) ? 'согласную → <b>은</b>' : 'гласную → <b>는</b>'}</div>${ruleBtn('topic')}` };
     },
     sentence(it) {
       const { p, jb } = it; const a = H.topic(p.ko), b = H.copula(jb.ko);
@@ -247,7 +275,37 @@
       const combos = [['은', '이에요'], ['은', '예요'], ['는', '이에요'], ['는', '예요']];
       return { kind: 'choice', label: 'Заполни пропуски', prompt: `<div class="q-ko md">${esc(p.ko)}<span class="blank">__</span> ${esc(jb.ko)}<span class="blank">__</span>.</div><div class="hint">${esc(p.ru)} — ${esc(jb.ru)}</div>`,
         options: combos.map(([x, y]) => ({ text: `${x} … ${y}`, ok: x === a && y === b, ko: true })), sayAfter: full,
-        explain: `<div class="ex-line"><span class="ko">${esc(full)}</span>${sayBtn(full, 'sm')}</div>` };
+        explain: `<div class="ex-line"><span class="ko">${esc(full)}</span>${sayBtn(full, 'sm')}</div><div class="row">${ruleBtn('topic')}${ruleBtn('copula')}</div>` };
+    },
+    cloze(it) {
+      const l = it.line, e = it.entry; const tokens = l.ko.split(/\s+/);
+      const shown = tokens.map((t, i) => i === it.ti ? `<span class="slot">${'＿'.repeat(Math.max(2, [...e.ko].length))}</span>${esc(t.slice(e.ko.length))}` : esc(t)).join(' ');
+      const ds = fillDistractors(e, sameKind(e).filter((x) => x.c === e.c), lenNear(e), 3, (x) => x.ko);
+      return { kind: 'choice', label: 'Вставь пропущенное слово', prompt: `<div class="q-ko md">${shown}</div><div class="hint">${esc(l.ru)}</div>`,
+        options: shuffle([e, ...ds]).map((x) => ({ text: x.ko, ok: x === e, ko: true })), sayAfter: l.ko,
+        explain: `<div class="ex-line"><span class="ko">${esc(l.ko)}</span>${sayBtn(l.ko, 'sm')}</div><div class="ex-ru"><span class="ko">${esc(e.ko)}</span> — ${esc(e.ru)}</div>` };
+    },
+    shadow(it) {
+      const l = it.line;
+      return { kind: 'speak', label: 'Послушай и повтори', autoplay: l.ko, fuzzy: true, answer: l.ko,
+        prompt: `<div class="q-ko md">${esc(l.ko)}</div><div class="hint">${esc(l.ru)}</div>${sayBtn(l.ko)}`,
+        explain: `<div class="ex-line"><span class="ko">${esc(l.ko)}</span>${sayBtn(l.ko, 'sm')}</div><div class="ex-ru">${esc(l.ru)}</div>` };
+    },
+    'num-read'(it) {
+      const S = Numbers.SYSTEMS[it.sys]; const ds = shuffle(Numbers.near(it.n, it.sys)).slice(0, 3);
+      return { kind: 'choice', label: `Как прочитать (${S.title})?`, prompt: `<div class="q-num">${it.n}</div><div class="hint">${S.use}</div>`,
+        options: shuffle([it.n, ...ds]).map((x) => ({ text: S.read(x), ok: x === it.n, ko: true })), sayAfter: S.read(it.n), explain: numExplain(it) };
+    },
+    'num-value'(it) {
+      const S = Numbers.SYSTEMS[it.sys]; const ds = shuffle(Numbers.near(it.n, it.sys)).slice(0, 3);
+      return { kind: 'choice', label: 'Какое это число?', prompt: `<div class="q-ko md">${S.read(it.n)}</div><div class="hint">${S.title}</div>`,
+        options: shuffle([it.n, ...ds]).map((x) => ({ text: String(x), ok: x === it.n })), sayAfter: S.read(it.n), explain: numExplain(it) };
+    },
+    'num-listen'(it) {
+      const S = Numbers.SYSTEMS[it.sys]; const ds = shuffle(Numbers.near(it.n, it.sys)).slice(0, 3);
+      return { kind: 'choice', label: 'Какое число прозвучало?', autoplay: S.read(it.n),
+        prompt: `<button class="big-say" data-say="${S.read(it.n)}">${icon('speaker')}</button><div class="hint">${S.title}</div>`,
+        options: shuffle([it.n, ...ds]).map((x) => ({ text: String(x), ok: x === it.n })), explain: numExplain(it) };
     },
     write(it) {
       const t = it.target; const trace = Math.random() < 0.5;
@@ -265,7 +323,7 @@
     'dialog-line'(it) {
       const d = it.dlg, line = d.lines[it.i];
       const prev = d.lines.slice(Math.max(0, it.i - 3), it.i);
-      const pool = uniqBy([...DB.dialogues(DB.lessons.map((l) => l.number)).flatMap((x) => x.lines), ...DB.entries.filter((e) => e.kind === 'phrase')], (x) => x.ko)
+      const pool = uniqBy([...DB.dialogues(DB.allNums()).flatMap((x) => x.lines), ...DB.entries.filter((e) => e.kind === 'phrase')], (x) => x.ko)
         .filter((x) => x.ko !== line.ko);
       const near = pool.filter((x) => Math.abs(x.ko.length - line.ko.length) <= 8);
       const ds = shuffle(near.length >= 3 ? near : pool).slice(0, 3);
@@ -286,6 +344,17 @@
   };
 
   const norm = (s) => s.replace(/[\s.,!?·…'"]/g, '');
+  const plural = (n, a, b, c) => { const m = n % 10, h = n % 100; return n + ' ' + (m === 1 && h !== 11 ? a : m >= 2 && m <= 4 && (h < 10 || h >= 20) ? b : c); };
+  // похожесть строк 0..1 (по расстоянию Левенштейна)
+  function similar(a, b) {
+    const m = [...a], n = [...b]; let prev = Array.from({ length: n.length + 1 }, (_, j) => j);
+    for (let i = 1; i <= m.length; i++) {
+      const cur = [i];
+      for (let j = 1; j <= n.length; j++) cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (m[i - 1] === n[j - 1] ? 0 : 1));
+      prev = cur;
+    }
+    return 1 - prev[n.length] / Math.max(1, m.length, n.length);
+  }
 
   // Слоги ответа по позициям: где ошибся — красным, чего не хватает — пустой клеткой
   function diffHtml(typed, answer) {
@@ -308,8 +377,12 @@
       root.innerHTML = `<section class="empty">${why}<br><a class="btn" href="#/practice">Назад</a></section>`;
       return;
     }
-    const isTest = mode === 'test';
-    const queue = mode === 'dialog' ? dialogQueue(nums) : choose(pool, isTest ? TEST_LEN : SESSION_LEN, mode);
+    if (mode === 'match') return startMatch(root, nums, pool);
+    const isTest = mode === 'test', isTimed = mode === 'timed';
+    const TIME = 5 * 60 * 1000; const t0 = Date.now(); let timeUp = false, timer = null;
+    const queue = mode === 'dialog' ? dialogQueue(nums) : choose(pool, isTest ? TEST_LEN : isTimed ? 80 : SESSION_LEN, isTimed ? 'mix' : mode);
+    const introduced = new Set(); let introCount = 0;
+    const introOk = !['cards', 'test', 'mistakes', 'timed'].includes(mode);
     const retried = new Set();
     const results = [];
     const marks = [];
@@ -320,7 +393,7 @@
       <section class="session">
         <header class="s-top">
           <button class="icon-btn quit" type="button" aria-label="Выйти">${icon('close')}</button>
-          <div class="segs"></div>
+          ${isTimed ? '<div class="tbar"><i></i></div>' : '<div class="segs"></div>'}
           <span class="s-count"></span>
         </header>
         <div class="s-body"></div>
@@ -334,13 +407,41 @@
     root.querySelector('.quit').addEventListener('click', quit);
 
     function progress() {
-      root.querySelector('.segs').innerHTML = queue.map((_, i) => `<i class="${i < idx ? (marks[i] ? 'ok' : 'bad') : i === idx ? 'cur' : ''}"></i>`).join('');
+      if (isTimed) return;
+      root.querySelector('.segs').innerHTML = queue.map((_, i) => `<i class="${i < idx ? (marks[i] === 'intro' ? 'intro' : marks[i] ? 'ok' : 'bad') : i === idx ? 'cur' : ''}"></i>`).join('');
       root.querySelector('.s-count').textContent = `${Math.min(idx + 1, queue.length)} / ${queue.length}`;
+    }
+    if (isTimed) {
+      const tick = () => {
+        const left = Math.max(0, TIME - (Date.now() - t0));
+        root.querySelector('.tbar i').style.width = (left / TIME) * 100 + '%';
+        root.querySelector('.s-count').textContent = `${Math.floor(left / 60000)}:${String(Math.floor(left / 1000) % 60).padStart(2, '0')}`;
+        if (!left) { timeUp = true; clearInterval(timer); root.querySelector('.s-count').textContent = 'время!'; }
+      };
+      tick(); timer = setInterval(tick, 500);
+    }
+
+    // Знакомство с новым словом: показать карточку, а проверить чуть позже
+    function renderIntro(it) {
+      const e = it.entry;
+      const ex = sentenceLines(DB.allNums()).find((l) => l.ko.split(/\s+/).some((t) => t.startsWith(e.ko)) && l.ko !== e.ko);
+      $body.innerHTML = `<div class="q-label">Новое слово</div><div class="q-prompt intro">${UI.cells(e.ko, 'big')}${sayBtn(e.ko)}
+        <div class="rr">${esc(H.romanize(e.ko))}</div><div class="q-ru">${esc(e.ru)}</div>
+        ${ex ? `<div class="intro-ex"><span class="ko">${esc(ex.ko)}</span><span class="muted sm">${esc(ex.ru)}</span></div>` : ''}</div>`;
+      $foot.innerHTML = '<button class="btn wide next">Запомнил</button>';
+      setTimeout(() => TTS.speak(e.ko), 250);
+      answered = true; q = { kind: 'intro', item: it };
+      $foot.querySelector('.next').addEventListener('click', () => { marks[idx] = 'intro'; idx++; next(); });
     }
 
     function next() {
-      if (idx >= queue.length) return finish();
+      if (idx >= queue.length || timeUp) return finish();
       const it = queue[idx];
+      if (introOk && it.entry && it.group === 'words' && !Store.get(it.key) && !introduced.has(it.key) && introCount < 5) {
+        introduced.add(it.key); introCount++;
+        queue.splice(Math.min(queue.length, idx + 3), 0, it); // проверим через пару вопросов
+        progress(); $foot.className = 's-foot'; return renderIntro(it);
+      }
       q = GEN[pick(it.types)](it); q.item = it; answered = false;
       progress();
       $foot.className = 's-foot'; $foot.innerHTML = '';
@@ -422,7 +523,7 @@
 
     // Произношение: распознавание речи ko-KR
     function renderSpeak() {
-      $body.innerHTML = head() + `<div class="speak"><button class="mic" type="button" aria-label="Говорить">${icon('mic')}</button><div class="heard hint">Нажми и скажи слово</div></div>`;
+      $body.innerHTML = head() + `<div class="speak"><button class="mic" type="button" aria-label="Говорить">${icon('mic')}</button><div class="heard hint">Нажми и ${q.fuzzy ? 'повтори фразу' : 'скажи слово'}</div></div>`;
       const mic = $body.querySelector('.mic'), heard = $body.querySelector('.heard');
       let tries = 0, rec = null;
       $foot.innerHTML = `<button class="btn ghost wide skip">Не получается, пропустить</button>`;
@@ -435,7 +536,7 @@
         rec.onresult = (ev) => {
           const alts = [...ev.results[0]].map((a) => a.transcript.trim());
           const target = norm(q.answer);
-          const ok = alts.some((a) => norm(a) === target || norm(a).includes(target));
+          const ok = alts.some((a) => norm(a) === target || norm(a).includes(target) || (q.fuzzy && similar(norm(a), target) >= 0.75));
           tries++;
           heard.innerHTML = `Услышал: <span class="ko">${esc(alts[0] || '—')}</span>`;
           if (ok) { done(true); } else if (tries >= 3) { done(false); } else { heard.innerHTML += ` · попробуй ещё раз (${3 - tries})`; }
@@ -465,6 +566,13 @@
       draw();
     }
 
+    // через сколько карточка вернётся при такой оценке (подписи на кнопках)
+    function ivl(g) {
+      const b = Math.max(0, Store.box(q.item.key));
+      const box = g === 1 ? Math.max(1, b) : Math.min(Store.MAX_BOX, b + (g === 3 ? 2 : 1));
+      const days = [0, 1, 2, 4, 8, 16, 32][box] * (g === 1 ? 0.5 : 1);
+      return days < 1 ? '½ дня' : `${days} ${days === 1 ? 'день' : days < 5 ? 'дня' : 'дней'}`;
+    }
     function renderCard() {
       const e = q.entry; const koFront = q.front === 'ko';
       const front = koFront ? UI.cells(e.ko, 'big') : `<div class="q-ru">${esc(e.ru)}</div>`;
@@ -474,13 +582,13 @@
       $foot.innerHTML = `<button class="btn wide reveal">Показать ответ</button>`;
       $foot.querySelector('.reveal').addEventListener('click', () => {
         $body.querySelector('.flash').innerHTML = back; if (!koFront) TTS.speak(e.ko);
-        $foot.innerHTML = `<div class="grade"><button class="btn bad" data-g="0">Не вспомнил</button><button class="btn good" data-g="1">Помню</button></div>`;
-        $foot.querySelectorAll('[data-g]').forEach((b) => b.addEventListener('click', () => { answered = true; record(b.dataset.g === '1'); idx++; next(); }));
+        $foot.innerHTML = `<div class="grade four"><button class="btn bad" data-g="0">Снова<small>сейчас</small></button><button class="btn ghost" data-g="1">Трудно<small>${ivl(1)}</small></button><button class="btn good" data-g="2">Хорошо<small>${ivl(2)}</small></button><button class="btn ghost" data-g="3">Легко<small>${ivl(3)}</small></button></div>`;
+        $foot.querySelectorAll('[data-g]').forEach((b) => b.addEventListener('click', () => { answered = true; record(+b.dataset.g > 0, +b.dataset.g); idx++; next(); }));
       });
     }
 
-    function record(ok) {
-      Store.answer(q.item.key, ok);
+    function record(ok, g) {
+      if (g !== undefined) Store.grade(q.item.key, g); else Store.answer(q.item.key, ok);
       marks[idx] = ok;
       results.push({ q, ok });
       if (!ok && !isTest && mode !== 'dialog' && !retried.has(q.item.key)) { retried.add(q.item.key); queue.push(q.item); }
@@ -499,6 +607,7 @@
     }
 
     function finish() {
+      clearInterval(timer);
       document.body.classList.remove('in-session');
       document.removeEventListener('keydown', onKey);
       const first = new Map(); results.forEach((r) => { if (!first.has(r.q.item.key)) first.set(r.q.item.key, r.ok); });
@@ -507,13 +616,15 @@
       const mistakes = uniqBy(results.filter((r) => !r.ok), (r) => r.q.item.key);
       const stampText = pct >= 90 ? '참 잘했어요' : pct >= 70 ? '잘했어요' : '힘내요';
       let testNote = '';
+      const timedBest = Store.meta('timedBest') || 0;
+      if (isTimed && results.length > timedBest) Store.setMeta('timedBest', results.length);
       if (isTest && nums.length === 1) {
         const prev = Store.getTest(nums[0]); Store.setTest(nums[0], pct);
         testNote = `<p class="muted">Контрольная по уроку ${nums[0]}${prev ? ` · лучший результат был ${prev.best}%` : ''}${prev && pct > prev.best ? ' — новый рекорд' : ''}</p>`;
       }
       root.innerHTML = `<section class="finish">
         <div class="stamp lg"><span>${stampText}</span></div>
-        <div class="score">${pct}%</div>${testNote}
+        <div class="score">${pct}%</div>${testNote}${isTimed ? `<p class="muted">За 5 минут: ${plural(results.length, 'ответ', 'ответа', 'ответов')}${timedBest ? (results.length > timedBest ? ' — новый рекорд' : ` · рекорд ${timedBest}`) : ''}</p>` : ''}
         <p class="muted">${right} из ${total} верно с первого раза · всего ответов: ${results.length}</p>
         ${mistakes.length ? `<div class="card"><h2 class="h">Стоит повторить</h2>${mistakes.map((r) => `<div class="mist">${r.q.explain || (r.q.entry ? `<span class="ko">${esc(r.q.entry.ko)}</span> — ${esc(r.q.entry.ru)}` : '')}</div>`).join('')}</div>` : ''}
         <div class="row"><a class="btn" href="#/practice/${mode}?l=${nums.join(',')}&r=${Date.now()}">Ещё раз</a><a class="btn ghost" href="#/">На главную</a></div>
@@ -524,13 +635,69 @@
       if (!document.body.classList.contains('in-session')) return;
       if (e.key === 'Escape') { quit(); return; }
       if (e.target.tagName === 'INPUT' && e.key !== 'Enter') return;
-      if (answered && e.key === 'Enter') { e.preventDefault(); $foot.querySelector('.next')?.click(); return; }
+      if (answered && q?.kind !== 'intro' && e.key === 'Enter') { e.preventDefault(); $foot.querySelector('.next')?.click(); return; }
       if (!answered && q?.kind === 'choice' && /^[1-4]$/.test(e.key)) { const i = +e.key - 1; if (q.options[i]) choose_(i); }
-      if (!answered && q?.kind === 'card' && (e.key === ' ' || e.key === 'Enter')) { e.preventDefault(); $foot.querySelector('.reveal')?.click(); }
+      if (!answered && q?.kind === 'card' && (e.key === ' ' || e.key === 'Enter')) { e.preventDefault(); $foot.querySelector('.reveal')?.click(); return; }
+      if (q?.kind === 'card' && /^[1-4]$/.test(e.key)) $foot.querySelector(`[data-g="${+e.key - 1}"]`)?.click();
+      if (q?.kind === 'intro' && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); $foot.querySelector('.next')?.click(); }
     }
     document.addEventListener('keydown', onKey);
-    start.cleanup = () => { document.removeEventListener('keydown', onKey); document.body.classList.remove('in-session'); };
+    start.cleanup = () => { clearInterval(timer); document.removeEventListener('keydown', onKey); document.body.classList.remove('in-session'); };
     next();
+  }
+
+  // ---------- «Найди пары»: 3 раунда по 6 пар на время ----------
+  function startMatch(root, nums, pool) {
+    const ROUNDS = 3, PAIRS = 6;
+    const items = choose(pool, ROUNDS * PAIRS, 'words');
+    if (items.length < PAIRS) { root.innerHTML = '<section class="empty">Слишком мало слов для игры.<br><a class="btn" href="#/practice">Назад</a></section>'; return; }
+    const t0 = Date.now(); let round = 0, misses = 0, timer = null; const missed = new Set();
+    document.body.classList.add('in-session');
+    root.innerHTML = `<section class="session match">
+      <header class="s-top"><button class="icon-btn quit" type="button" aria-label="Выйти">${icon('close')}</button><div class="segs"></div><span class="s-count">0:00</span></header>
+      <div class="q-label">Соедини слово с переводом</div><div class="pairs"></div></section>`;
+    const $pairs = root.querySelector('.pairs');
+    root.querySelector('.quit').addEventListener('click', () => { if (round === 0 || confirm('Выйти из игры?')) location.hash = '#/practice'; });
+    const fmt = (ms) => `${Math.floor(ms / 60000)}:${String(Math.floor(ms / 1000) % 60).padStart(2, '0')}`;
+    timer = setInterval(() => { root.querySelector('.s-count').textContent = fmt(Date.now() - t0); }, 500);
+    const rounds = Math.min(ROUNDS, Math.floor(items.length / PAIRS));
+
+    function drawRound() {
+      root.querySelector('.segs').innerHTML = Array.from({ length: rounds }, (_, i) => `<i class="${i < round ? 'ok' : i === round ? 'cur' : ''}"></i>`).join('');
+      const set = items.slice(round * PAIRS, round * PAIRS + PAIRS);
+      const left = shuffle(set), right = shuffle(set);
+      $pairs.innerHTML = `<div class="col">${left.map((it) => `<button class="pair ko" data-k="${esc(it.key)}" data-side="ko">${esc(it.entry.ko)}</button>`).join('')}</div>
+        <div class="col">${right.map((it) => `<button class="pair" data-k="${esc(it.key)}" data-side="ru">${esc(it.entry.ru)}</button>`).join('')}</div>`;
+      let sel = null, left_ = PAIRS;
+      $pairs.querySelectorAll('.pair').forEach((b) => b.addEventListener('click', () => {
+        if (b.classList.contains('done')) return;
+        if (b.dataset.side === 'ko') TTS.speak(set.find((x) => x.key === b.dataset.k).entry.ko);
+        if (!sel || sel.dataset.side === b.dataset.side) { $pairs.querySelectorAll('.pair.sel').forEach((x) => x.classList.remove('sel')); sel = b; b.classList.add('sel'); return; }
+        const a = sel; sel = null; a.classList.remove('sel');
+        const koBtn = a.dataset.side === 'ko' ? a : b;
+        if (a.dataset.k === b.dataset.k) {
+          a.classList.add('done'); b.classList.add('done');
+          if (!missed.has(a.dataset.k)) Store.answer(a.dataset.k, true);
+          if (--left_ === 0) { round++; round < rounds ? setTimeout(drawRound, 350) : setTimeout(end, 350); }
+        } else {
+          misses++; [a, b].forEach((x) => { x.classList.add('miss'); setTimeout(() => x.classList.remove('miss'), 400); });
+          if (!missed.has(koBtn.dataset.k)) { missed.add(koBtn.dataset.k); Store.answer(koBtn.dataset.k, false); }
+        }
+      }));
+    }
+    function end() {
+      clearInterval(timer); document.body.classList.remove('in-session');
+      const ms = Date.now() - t0, best = Store.meta('matchBest');
+      const record = misses === 0 && (!best || ms < best);
+      if (record) Store.setMeta('matchBest', ms);
+      root.innerHTML = `<section class="finish">
+        <div class="stamp lg"><span>${misses === 0 ? '참 잘했어요' : misses <= 3 ? '잘했어요' : '힘내요'}</span></div>
+        <div class="score">${fmt(ms)}</div>
+        <p class="muted">${rounds * PAIRS} пар · ошибок: ${misses}${record ? ' · новый рекорд без ошибок' : best ? ` · рекорд без ошибок ${fmt(best)}` : ''}</p>
+        <div class="row"><a class="btn" href="#/practice/match?l=${nums.join(',')}&r=${Date.now()}">Ещё раз</a><a class="btn ghost" href="#/">На главную</a></div></section>`;
+    }
+    start.cleanup = () => { clearInterval(timer); document.body.classList.remove('in-session'); };
+    drawRound();
   }
 
   const mistakes = (nums) => buildPool('mistakes', nums).map((it) => ({ ...it, s: Store.get(it.key) })).sort((a, b) => b.s.wrong - a.s.wrong);

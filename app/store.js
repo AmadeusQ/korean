@@ -5,7 +5,7 @@
   const INTERVALS = [0, 1, 2, 4, 8, 16, 32].map((d) => d * DAY); // по коробкам 0..6
   const MAX_BOX = INTERVALS.length - 1;
 
-  const empty = () => ({ items: {}, days: {}, settings: { rate: 0.85, dailyGoal: 30, romanize: true, typing: true, keyboard: true, theme: 'auto' }, tests: {} });
+  const empty = () => ({ items: {}, days: {}, settings: { rate: 0.85, dailyGoal: 30, romanize: true, typing: true, keyboard: true, theme: 'auto' }, tests: {}, custom: [], meta: {} });
   let state;
   try { state = Object.assign(empty(), JSON.parse(localStorage.getItem(KEY) || '{}')); } catch { state = empty(); }
   state.settings = Object.assign(empty().settings, state.settings);
@@ -17,6 +17,12 @@
   function box(key) { return state.items[key]?.box ?? -1; } // -1 — ещё не встречалось
   function isDue(key, now = Date.now()) { const it = state.items[key]; return !!it && it.due <= now; }
 
+  function countDay(correct) {
+    const d = today();
+    const day = state.days[d] || { n: 0, ok: 0 };
+    day.n++; if (correct) day.ok++;
+    state.days[d] = day;
+  }
   function answer(key, correct) {
     const now = Date.now();
     const it = state.items[key] || { box: 0, due: now, right: 0, wrong: 0 };
@@ -25,12 +31,27 @@
     it.due = now + INTERVALS[it.box];
     it.last = now;
     state.items[key] = it;
-    const d = today();
-    const day = state.days[d] || { n: 0, ok: 0 };
-    day.n++; if (correct) day.ok++;
-    state.days[d] = day;
-    save();
+    countDay(correct); save();
     return it;
+  }
+  // Оценка карточки как в Anki: 0 снова, 1 трудно, 2 хорошо, 3 легко
+  function grade(key, g) {
+    const now = Date.now();
+    const it = state.items[key] || { box: 0, due: now, right: 0, wrong: 0 };
+    if (g === 0) { it.wrong++; it.box = 0; it.due = now; }
+    else {
+      it.right++;
+      it.box = g === 1 ? Math.max(1, it.box) : Math.min(MAX_BOX, it.box + (g === 3 ? 2 : 1));
+      it.due = now + INTERVALS[it.box] * (g === 1 ? 0.5 : 1);
+    }
+    it.last = now; state.items[key] = it;
+    countDay(g > 0); save();
+    return it;
+  }
+  // Сколько заданий станет к повторению к концу завтрашнего дня (из тех, что сейчас ещё не пора)
+  function forecastTomorrow(keys) {
+    const now = Date.now(); const end = new Date(); end.setDate(end.getDate() + 1); end.setHours(23, 59, 59, 999);
+    return keys.filter((k) => { const it = state.items[k]; return it && it.due > now && it.due <= end.getTime(); }).length;
   }
 
   function streak() {
@@ -46,7 +67,7 @@
   }
 
   window.Store = {
-    get, box, isDue, answer, streak, lastDays, MAX_BOX,
+    get, box, isDue, answer, grade, forecastTomorrow, streak, lastDays, MAX_BOX,
     todayStats: () => state.days[today()] || { n: 0, ok: 0 },
     settings: () => state.settings,
     setSetting(k, v) { state.settings[k] = v; save(); },
@@ -56,8 +77,14 @@
       const prev = state.tests[n];
       state.tests[n] = { best: Math.max(pct, prev?.best || 0), last: pct, date: today() }; save();
     },
+    // свои слова
+    custom: () => state.custom || [],
+    addCustom(w) { state.custom = (state.custom || []).filter((x) => x.ko !== w.ko); state.custom.push({ ...w, added: today() }); save(); },
+    removeCustom(ko) { state.custom = (state.custom || []).filter((x) => x.ko !== ko); save(); },
+    meta: (k) => state.meta?.[k],
+    setMeta(k, v) { state.meta = state.meta || {}; state.meta[k] = v; save(); },
     exportJSON: () => JSON.stringify(state, null, 1),
-    importJSON(text) { const s = JSON.parse(text); if (!s.items) throw new Error('Не похоже на файл прогресса'); state = Object.assign(empty(), s); state.settings = Object.assign(empty().settings, s.settings); save(); },
+    importJSON(text) { const s = JSON.parse(text); if (!s.items) throw new Error('Не похоже на файл прогресса'); state = Object.assign(empty(), s); state.custom = s.custom || []; state.settings = Object.assign(empty().settings, s.settings); save(); },
     // Объединить прогресс с другого устройства: по каждому заданию берём более свежий ответ
     merge(other) {
       if (!other || !other.items) throw new Error('Не похоже на прогресс');
@@ -65,11 +92,13 @@
       for (const [d, v] of Object.entries(other.days || {})) { const m = state.days[d]; if (!m || v.n > m.n) state.days[d] = v; }
       state.tests = state.tests || {};
       for (const [n, t] of Object.entries(other.tests || {})) { const m = state.tests[n]; if (!m || t.best > m.best) state.tests[n] = t; }
+      state.custom = state.custom || [];
+      for (const w of other.custom || []) if (!state.custom.some((x) => x.ko === w.ko)) state.custom.push(w);
       save();
     },
     // Компактная строка для ссылки переноса (без настроек)
     async pack() {
-      const json = JSON.stringify({ items: state.items, days: state.days, tests: state.tests || {} });
+      const json = JSON.stringify({ items: state.items, days: state.days, tests: state.tests || {}, custom: state.custom || [] });
       let bytes = new TextEncoder().encode(json), z = '0';
       if (window.CompressionStream) { bytes = new Uint8Array(await new Response(new Blob([bytes]).stream().pipeThrough(new CompressionStream('gzip'))).arrayBuffer()); z = '1'; }
       let bin = ''; bytes.forEach((b) => (bin += String.fromCharCode(b)));

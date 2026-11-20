@@ -11,7 +11,7 @@
     const tab = parts[0] || 'home';
     document.querySelectorAll('.nav a').forEach((a) => a.classList.toggle('on', a.dataset.tab === (tab === 'lesson' ? 'lessons' : tab)));
     window.scrollTo(0, 0);
-    const nums = params.get('l') ? params.get('l').split(',').map(Number).filter(Boolean) : DB.lessons.map((l) => l.number);
+    const nums = params.get('l') ? params.get('l').split(',').filter((x) => x !== '').map(Number).filter((n) => !isNaN(n)) : DB.allNums();
     switch (tab) {
       case 'lessons': return Views.lessons(view);
       case 'lesson': return Views.lesson(view, parts[1]);

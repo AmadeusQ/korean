@@ -27,7 +27,23 @@
         l.words.forEach((w) => add(w, 'word'));
         l.phrases.forEach((w) => add(w, 'phrase'));
       }
+      Store.custom().forEach((w) => DB.addCustom(w, false));
     },
+    // Свои слова живут как «урок 0»
+    addCustom(w, persist = true) {
+      if (persist) Store.addCustom(w);
+      const prev = DB.byKo.get(w.ko);
+      if (prev) { if (!prev.lessons.includes(0)) prev.lessons.push(0); prev.mine = true; return prev; }
+      const e = { ...w, kind: /\s/.test(w.ko) ? 'phrase' : 'word', key: 'w:' + w.ko, lesson: 0, lessons: [0], c: w.c || 'Мои слова', mine: true, t: w.t || (/다$/.test(w.ko) ? 'v' : undefined) };
+      DB.byKo.set(w.ko, e); DB.entries.push(e); return e;
+    },
+    removeCustom(ko) {
+      Store.removeCustom(ko);
+      const e = DB.byKo.get(ko); if (!e) return;
+      e.lessons = e.lessons.filter((n) => n !== 0); e.mine = false;
+      if (!e.lessons.length) { DB.byKo.delete(ko); DB.entries.splice(DB.entries.indexOf(e), 1); }
+    },
+    allNums: () => [...DB.lessons.map((l) => l.number), ...(Store.custom().length ? [0] : [])],
     lesson: (n) => lessons.find((l) => l.number === +n),
     photos: (l) => Array.from({ length: l.photos || 0 }, (_, i) => `materials/${l.id}/${String(i + 1).padStart(2, '0')}.jpg`),
     entriesFor: (nums) => DB.entries.filter((e) => e.lessons.some((n) => nums.includes(n))),

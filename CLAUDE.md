@@ -39,7 +39,9 @@ index.html, manifest.webmanifest, sw.js, icon.svg
 
 ## Режимы и стиль
 
-Режимы в `MODES` (`app/practice.js`): mix, words, cards, listen, hangul, grammar, build, dialog (ролевой диалог по `dialogues`), write (прописи на canvas с самооценкой), speak (Web Speech Recognition, ko-KR), скрытые mistakes и test (контрольная по уроку, 20 вопросов, лучший результат в `Store.getTest`).
+Режимы в `MODES` (`app/practice.js`): mix, words, cards (4 оценки как в Anki, `Store.grade`), listen, hangul, grammar, build (сборка фразы и пропуск слова `cloze`), dialog (ролевой диалог по `dialogues`), match (пары на время, отдельный экран `startMatch`), timed (5 минут), numbers (`app/numbers.js`), write (прописи на canvas с самооценкой), speak и shadow (Web Speech Recognition, ko-KR), скрытые mistakes и test (контрольная по уроку, 20 вопросов, лучший результат в `Store.getTest`). Новое слово при первой встрече сначала показывается карточкой «Новое слово», проверяется через пару вопросов. В разборе грамматики кнопка «Правило →» (`data-rule="<id грамматики>"`).
+
+Свои слова пользователя: `Store.custom()`, в `DB` это «урок 0» (`DB.allNums()` включает 0, если такие слова есть).
 
 Стиль — «корейская тетрадь»: бумага, тушь, один красный акцент, клетки 원고지 (`UI.cells`), печать 도장 (`UI.stamp`), тонкие линии вместо теней. Не добавлять градиенты, тени, эмодзи, иконки в цветных плашках.
 
