@@ -20,7 +20,7 @@
       case 'settings': return Views.settings(view);
       case 'import': return Views.importLink(view, parts[1] || '');
       case 'practice':
-        if (parts[1] && Practice.MODES[parts[1]]) return Practice.start(view, parts[1], nums);
+        if (parts[1] && Practice.MODES[parts[1]]) return Practice.start(view, parts[1], nums, { c: params.get('c') || '', q: params.get('q') || '' });
         return Views.practiceMenu(view);
       default: return Views.home(view);
     }

@@ -367,8 +367,11 @@
   }
 
   // ---------- экран тренировки ----------
-  function start(root, mode, nums) {
-    const pool = buildPool(mode, nums);
+  function start(root, mode, nums, filter = {}) {
+    const filtered = !!(filter.c || filter.q);
+    // выборка из словаря: оставляем только слова, подходящие под тему и поиск
+    const pool = filtered ? buildPool(mode, nums).filter((it) => it.entry && DB.matches(it.entry, filter)) : buildPool(mode, nums);
+    const again = `#/practice/${mode}?l=${nums.join(',')}${filter.c ? '&c=' + encodeURIComponent(filter.c) : ''}${filter.q ? '&q=' + encodeURIComponent(filter.q) : ''}`;
     if (!pool.length) {
       const why = mode === 'mistakes' ? 'Ошибок пока нет — сначала потренируйся в других режимах.'
         : mode === 'speak' && !micSupported() ? 'Этот браузер не умеет распознавать речь. Попробуй Chrome на компьютере или Android.'
@@ -641,7 +644,7 @@
         <div class="score">${pct}%</div>${testNote}${isTimed ? `<p class="muted">За 5 минут: ${plural(results.length, 'ответ', 'ответа', 'ответов')}${timedBest ? (results.length > timedBest ? ' — новый рекорд' : ` · рекорд ${timedBest}`) : ''}</p>` : ''}
         <p class="muted">${right} из ${total} верно с первого раза · всего ответов: ${results.length}</p>
         ${mistakes.length ? `<div class="card"><h2 class="h">Стоит повторить</h2>${mistakes.map((r) => `<div class="mist">${r.q.explain || (r.q.entry ? `<span class="ko">${esc(r.q.entry.ko)}</span> — ${esc(r.q.entry.ru)}` : '')}</div>`).join('')}</div>` : ''}
-        <div class="row"><a class="btn" href="#/practice/${mode}?l=${nums.join(',')}&r=${Date.now()}">Ещё раз</a><a class="btn ghost" href="#/">На главную</a></div>
+        <div class="row"><a class="btn" href="${again}&r=${Date.now()}">Ещё раз</a><a class="btn ghost" href="#/">На главную</a></div>
       </section>`;
     }
 

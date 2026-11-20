@@ -260,14 +260,18 @@
     $('.f-lesson').value = dictState.lesson; $('.f-cat').value = dictState.cat; $('.f-sort').value = dictState.sort;
     const draw = () => {
       const q = dictState.q.trim().toLowerCase();
-      let list = DB.entries.filter((e) =>
-        (dictState.lesson === 'all' || e.lessons.includes(+dictState.lesson)) &&
-        (dictState.cat === 'all' || e.c === dictState.cat) &&
-        (!q || e.ko.includes(q) || e.ru.toLowerCase().includes(q) || H.romanize(e.ko).includes(q.replace(/[\s-]/g, ''))));
+      const filter = { c: dictState.cat === 'all' ? '' : dictState.cat, q };
+      let list = DB.entries.filter((e) => (dictState.lesson === 'all' || e.lessons.includes(+dictState.lesson)) && DB.matches(e, filter));
       if (dictState.sort === 'abc') list = list.slice().sort((a, b) => a.ko.localeCompare(b.ko, 'ko'));
       if (dictState.sort === 'weak') list = list.slice().sort((a, b) => Store.box(a.key) - Store.box(b.key));
       $('.count').textContent = list.length;
-      $('#dict-cards').href = `#/practice/cards${dictState.lesson === 'all' ? '' : '?l=' + dictState.lesson}`;
+      // карточки ровно по тому, что сейчас видно в словаре: урок + тема + поиск
+      const p = new URLSearchParams();
+      if (dictState.lesson !== 'all') p.set('l', dictState.lesson);
+      if (filter.c) p.set('c', filter.c);
+      if (q) p.set('q', q);
+      $('#dict-cards').href = `#/practice/cards${p.toString() ? '?' + p : ''}`;
+      $('#dict-cards').textContent = `Карточки по этой выборке · ${list.length}`;
       const row = (e) => `<div class="wrow" data-ko="${esc(e.ko)}"><div class="w-ko"><span class="ko serif">${esc(e.ko)}</span>${UI.rr(e.ko)}</div>
         <div class="w-ru">${esc(e.ru)}<div class="w-meta">${esc(e.c)} · ${e.lessons.map((n) => (n === 0 ? 'мои' : `${n}과`)).join(', ')}</div></div>${strength(e.key)}${sayBtn(e.ko, 'sm')}</div>`;
       const groupOf = dictState.sort === 'abc' ? (e) => { const d = H.decompose(e.ko[0]); return d ? d.cho : e.ko[0]; }

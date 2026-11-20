@@ -43,6 +43,12 @@
       e.lessons = e.lessons.filter((n) => n !== 0); e.mine = false;
       if (!e.lessons.length) { DB.byKo.delete(ko); DB.entries.splice(DB.entries.indexOf(e), 1); }
     },
+    // фильтр словаря: тема c и поиск q (по-корейски, по-русски или латиницей)
+    matches(e, f = {}) {
+      if (f.c && e.c !== f.c) return false;
+      const q = (f.q || '').trim().toLowerCase();
+      return !q || e.ko.includes(q) || e.ru.toLowerCase().includes(q) || Hangul.romanize(e.ko).includes(q.replace(/[\s-]/g, ''));
+    },
     allNums: () => [...DB.lessons.map((l) => l.number), ...(Store.custom().length ? [0] : [])],
     lesson: (n) => lessons.find((l) => l.number === +n),
     photos: (l) => Array.from({ length: l.photos || 0 }, (_, i) => `materials/${l.id}/${String(i + 1).padStart(2, '0')}.jpg`),
