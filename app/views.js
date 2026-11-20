@@ -347,7 +347,6 @@
       <div class="card form">
         <h3>Тренировка</h3>
         <label class="field"><span>Цель: ответов в день</span><input type="number" min="5" max="300" step="5" value="${s.dailyGoal}" data-k="dailyGoal"></label>
-        <label class="field"><span>После верного ответа переходить дальше сам</span><input type="checkbox" data-k="autoNext" ${s.autoNext ? 'checked' : ''}></label>
         <label class="field"><span>Задания с набором текста</span><input type="checkbox" data-k="typing" ${s.typing ? 'checked' : ''}></label>
         <label class="field"><span>Экранная корейская клавиатура (выключи, если есть своя корейская раскладка)</span><input type="checkbox" data-k="keyboard" ${s.keyboard ? 'checked' : ''}></label>
       </div>

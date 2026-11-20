@@ -279,9 +279,6 @@ body.in-session .topbar { display: none; }
 @keyframes up { from { transform: translateY(20px); opacity: 0; } }
 .s-foot.ok { border-color: var(--green); } .s-foot.bad { border-color: var(--red); }
 .s-foot.ok .next { background: var(--green); border-color: var(--green); color: #fff; } .s-foot.bad .next { background: var(--red); border-color: var(--red); color: #fff; }
-.next.auto { position: relative; overflow: hidden; }
-.next.auto::after { content: ''; position: absolute; left: 0; bottom: 0; height: 3px; width: 100%; background: rgba(255, 255, 255, .55); transform-origin: left; animation: fill 1.4s linear forwards; }
-@keyframes fill { from { transform: scaleX(0); } }
 .fb { margin-bottom: 14px; }
 .fb-title { display: flex; align-items: baseline; gap: 10px; font: 500 20px var(--serif); margin-bottom: 6px; }
 .fb-title small { font: 14px var(--sans); color: var(--muted); }

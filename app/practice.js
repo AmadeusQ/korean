@@ -329,7 +329,7 @@
     const $body = root.querySelector('.s-body'), $foot = root.querySelector('.s-foot');
     const quit = () => {
       if (results.length && idx < queue.length && !confirm('Выйти из тренировки? Уже данные ответы сохранены.')) return;
-      clearTimeout(autoTimer); location.hash = '#/practice';
+      location.hash = '#/practice';
     };
     root.querySelector('.quit').addEventListener('click', quit);
 
@@ -494,12 +494,9 @@
       $foot.innerHTML = `<div class="fb"><div class="fb-title">${ok ? pick(['맞아요', '좋아요', '잘했어요']) + ' <small>верно</small>' : '틀렸어요 <small>правильный ответ</small>'}</div>
         <div class="fb-ex">${q.explain || ''}</div></div><button class="btn wide next">Дальше</button>`;
       const nb = $foot.querySelector('.next');
-      let gone = false; const go = () => { if (gone) return; gone = true; clearTimeout(autoTimer); idx++; next(); };
+      let gone = false; const go = () => { if (gone) return; gone = true; idx++; next(); };
       nb.addEventListener('click', go); nb.focus({ preventScroll: true });
-      // верный ответ — дальше сами; после ошибки ждём, чтобы успеть прочитать разбор
-      if (ok && Store.settings().autoNext) { nb.classList.add('auto'); autoTimer = setTimeout(go, 1400); }
     }
-    let autoTimer = null;
 
     function finish() {
       document.body.classList.remove('in-session');
@@ -532,7 +529,7 @@
       if (!answered && q?.kind === 'card' && (e.key === ' ' || e.key === 'Enter')) { e.preventDefault(); $foot.querySelector('.reveal')?.click(); }
     }
     document.addEventListener('keydown', onKey);
-    start.cleanup = () => { clearTimeout(autoTimer); document.removeEventListener('keydown', onKey); document.body.classList.remove('in-session'); };
+    start.cleanup = () => { document.removeEventListener('keydown', onKey); document.body.classList.remove('in-session'); };
     next();
   }
 
