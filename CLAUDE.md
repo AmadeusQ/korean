@@ -9,7 +9,7 @@ materials/lesson-XX/01.jpg …   фото страниц урока (исход�
 data/index.js                   список уроков: window.LESSON_FILES
 data/lessons/lesson-XX.js       содержимое урока: registerLesson({...})
 app/                            код: hangul.js, store.js, tts.js, ui.js, keyboard.js (экранная клавиатура), data.js, practice.js, views.js, main.js, styles.css
-index.html, manifest.webmanifest, sw.js, icon.svg
+index.html, manifest.webmanifest, sw.js, icon.svg, icon-*.png (PNG-значки: python tools/make_icons.py)
 ```
 
 Модули — обычные `<script>` с глобалами (`Hangul`, `Store`, `TTS`, `UI`, `DB`, `Practice`, `Views`), не ES-модули: иначе не работает открытие через `file://`.
@@ -47,7 +47,9 @@ index.html, manifest.webmanifest, sw.js, icon.svg
 
 ## Прогресс
 
-`localStorage`, ключ `hangul-study-v1`. Ключи заданий: `w:<ko>` (слово или фраза), `j:<буква>`, `b:<слово>` (патчим), `g:copula:<ko>`, `g:topic:<ko>`, `g:sent:<p>|<job>`, `build:<фраза>`, `dl:<реплика>`, `write:<цель>`, `speak:<ko>`. Перенос между устройствами: ссылка `#/import/<сжатый прогресс>` (`Store.pack` / `Store.unpack` / `Store.merge`). Не переименовывать ключи без миграции, иначе пропадёт прогресс. Интервалы повторения: коробки 0–6, 0/1/2/4/8/16/32 дня.
+`localStorage`, ключ `hangul-study-v1`. Ключи заданий: `w:<ko>` (слово или фраза), `j:<буква>`, `b:<слово>` (патчим), `g:copula:<ko>`, `g:topic:<ko>`, `g:sent:<p>|<job>`, `build:<фраза>`, `cloze:<фраза>`, `dl:<реплика>`, `write:<цель>` / `write:j:<буква>`, `speak:<ko>`, `shadow:<фраза>`, `num:<s|n>:<small|mid|big>` (числа по диапазонам, не по каждому числу). «Мои ошибки» собираются из ключей хранилища через `resolveKey` в `practice.js`: новый тип ключа надо добавить туда.
+
+Всё, что читается из хранилища, ссылки переноса и файла, проходит через `clean()` в `store.js` (типы, пределы, отброс лишнего). Не вставлять в HTML значения в обход `esc()` и не ослаблять `clean()`: ссылку переноса может прислать кто угодно. Перенос между устройствами: ссылка `#/import/<сжатый прогресс>` (`Store.pack` / `Store.unpack` / `Store.merge`). Не переименовывать ключи без миграции, иначе пропадёт прогресс. Интервалы повторения: коробки 0–6, 0/1/2/4/8/16/32 дня.
 
 ## Озвучка
 

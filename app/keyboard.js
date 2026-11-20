@@ -63,10 +63,18 @@
     input.addEventListener('keydown', (e) => {
       if (e.isComposing || e.ctrlKey || e.metaKey || e.altKey) return;
       if (/[ㄱ-ㆎ가-힣]/.test(e.key) || e.key === 'Process') return; // уже стоит корейская раскладка
-      const j = (e.shiftKey && CODE_SHIFT[e.code]) || CODE[e.code];
-      if (j) { e.preventDefault(); seq.push(j); sync(); return; }
-      if (e.key === 'Backspace' && input.selectionStart === input.value.length && input.selectionEnd === input.value.length) { e.preventDefault(); seq.pop(); sync(); return; }
-      if (e.key === ' ') { e.preventDefault(); seq.push(' '); sync(); }
+      const j = (e.shiftKey && CODE_SHIFT[e.code]) || CODE[e.code] || (e.key === ' ' ? ' ' : null);
+      const back = e.key === 'Backspace';
+      if (!j && !back) return;
+      e.preventDefault();
+      // правим текст там, где курсор: выделение заменяется, буква собирается со слогом слева от курсора
+      const v = input.value, s0 = input.selectionStart ?? v.length, s1 = input.selectionEnd ?? v.length;
+      const head = toSeq(v.slice(0, s0)), tail = v.slice(s1);
+      if (back) { if (s0 === s1) head.pop(); } else head.push(j);
+      const left = assemble(head);
+      input.value = left + tail; seq = toSeq(input.value);
+      input.setSelectionRange(left.length, left.length);
+      input.dispatchEvent(new Event('kbinput'));
     });
     const kb = document.createElement('div'); kb.className = 'kb';
     const draw = () => {

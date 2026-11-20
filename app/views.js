@@ -107,7 +107,7 @@
   // ---------- Урок ----------
   function lesson(root, n) {
     const l = DB.lesson(n);
-    if (!l) { root.innerHTML = '<p>Урок не найден</p>'; return; }
+    if (!l) { root.innerHTML = '<section class="empty">Такого урока нет.<br><a class="btn" href="#/lessons">Все уроки</a></section>'; return; }
     const photos = DB.photos(l);
     const tabs = [
       ['overview', 'Обзор'], l.words.length && ['words', `Слова · ${l.words.length}`], l.phrases.length && ['phrases', `Фразы · ${l.phrases.length}`],
@@ -197,7 +197,7 @@
     box.innerHTML = `<div class="sheet" role="dialog" aria-label="${esc(e.ko)}">
       <button class="icon-btn sheet-x" aria-label="Закрыть">${icon('close')}</button>
       <div class="sheet-head">${UI.cells(e.ko, 'big')}${sayBtn(e.ko)}</div>
-      <div class="rr sheet-rr">${esc(H.romanize(e.ko))}</div>
+      ${Store.settings().romanize ? `<div class="rr sheet-rr">${esc(H.romanize(e.ko))}</div>` : ''}
       <div class="sheet-ru">${esc(e.ru)}</div>
       <div class="muted sm">${esc(e.c)} · ${e.lessons.map((n) => (n === 0 ? 'мои слова' : `<a class="link" href="#/lesson/${n}">${n}과</a>`)).join(', ')}</div>
       <div class="sheet-stats">${s ? `${strength(e.key)} <span class="sm">верно ${s.right}, ошибок ${s.wrong}</span>` : '<span class="sm muted">Ещё не тренировалось</span>'}</div>
@@ -242,7 +242,7 @@
   function dict(root) {
     root.innerHTML = `<h1 class="page-title">Словарь <span class="muted count"></span></h1>
       <div class="filters">
-        <input class="search" type="search" placeholder="Поиск: 학생, студент, hakseng…" value="${esc(dictState.q)}">
+        <input class="search" type="search" placeholder="Поиск: 학생, студент, haksaeng…" value="${esc(dictState.q)}">
         <select class="f-lesson"><option value="all">Все уроки</option>${DB.lessons.map((l) => `<option value="${l.number}">제${l.number}과</option>`).join('')}<option value="0">Мои слова</option></select>
         <select class="f-cat"><option value="all">Все темы</option>${DB.categories().map((c) => `<option>${esc(c)}</option>`).join('')}</select>
         <select class="f-sort"><option value="lesson">По урокам</option><option value="abc">По алфавиту</option><option value="weak">Сначала слабые</option></select>
@@ -271,7 +271,7 @@
       if (filter.c) p.set('c', filter.c);
       if (q) p.set('q', q);
       $('#dict-cards').href = `#/practice/cards${p.toString() ? '?' + p : ''}`;
-      $('#dict-cards').textContent = `Карточки по этой выборке · ${list.length}`;
+      $('#dict-cards').textContent = `Карточки по этой выборке · ${list.length > 30 ? `30 из ${list.length}` : list.length}`;
       const row = (e) => `<div class="wrow" data-ko="${esc(e.ko)}"><div class="w-ko"><span class="ko serif">${esc(e.ko)}</span>${UI.rr(e.ko)}</div>
         <div class="w-ru">${esc(e.ru)}<div class="w-meta">${esc(e.c)} · ${e.lessons.map((n) => (n === 0 ? 'мои' : `${n}과`)).join(', ')}</div></div>${strength(e.key)}${sayBtn(e.ko, 'sm')}</div>`;
       const groupOf = dictState.sort === 'abc' ? (e) => { const d = H.decompose(e.ko[0]); return d ? d.cho : e.ko[0]; }
@@ -344,6 +344,8 @@
   function mistakesBlock(nums) {
     const list = Practice.mistakes(nums);
     const label = (it) => it.entry ? `<span class="ko">${esc(it.entry.ko)}</span> — ${esc(it.entry.ru)}`
+      : it.sys ? `числа: ${esc(Numbers.SYSTEMS[it.sys].title)}, ${it.n <= 10 ? 'до 10' : it.n < 100 ? 'до 100' : 'от 100'}`
+      : it.target ? `пропись <span class="ko">${esc(it.target)}</span>`
       : it.jamo ? `буква <span class="ko">${esc(it.jamo)}</span>` : it.line ? `<span class="ko">${esc(it.line.ko)}</span>`
       : it.p ? `<span class="ko">${esc(it.p.ko)} … ${esc(it.jb.ko)}</span>` : it.dlg ? `<span class="ko">${esc(it.dlg.lines[it.i].ko)}</span>` : esc(it.key);
     const q = nums.length === allNums().length ? '' : `?l=${nums.join(',')}`;
@@ -421,7 +423,7 @@
     });
     root.querySelector('.imp').addEventListener('change', async (e) => {
       const f = e.target.files[0]; if (!f) return;
-      try { Store.importJSON(await f.text()); UI.toast('Прогресс загружен'); applyTheme(); } catch (err) { UI.toast('Ошибка: ' + err.message); }
+      try { Store.importJSON(await f.text()); location.hash = '#/'; location.reload(); } catch (err) { UI.toast('Ошибка: ' + err.message); }
     });
     root.querySelector('.mk-link').addEventListener('click', async () => {
       const url = `${location.origin}${location.pathname}#/import/${await Store.pack()}`;
@@ -429,7 +431,7 @@
       if (navigator.share && matchMedia('(pointer: coarse)').matches) { navigator.share({ title: 'Мой корейский: прогресс', url }).catch(() => {}); return; }
       try { await navigator.clipboard.writeText(url); UI.toast('Ссылка скопирована'); } catch { UI.toast('Скопируй ссылку из поля'); }
     });
-    root.querySelector('.rst').addEventListener('click', () => { if (confirm('Удалить весь прогресс на этом устройстве?')) { Store.reset(); UI.toast('Прогресс сброшен'); settings(root); } });
+    root.querySelector('.rst').addEventListener('click', () => { if (confirm('Удалить весь прогресс и свои слова на этом устройстве?')) { Store.reset(); location.hash = '#/'; location.reload(); } });
   }
 
   async function importLink(root, data) {
@@ -439,7 +441,11 @@
     root.innerHTML = `<section class="card form"><h3>Перенос прогресса</h3>
       <p>В ссылке: ${plural(n, 'задание', 'задания', 'заданий')} и ${plural(d, 'день', 'дня', 'дней')} занятий. Он объединится с прогрессом на этом устройстве — более свежие ответы победят.</p>
       <div class="row"><button class="btn ok-imp">Перенести</button><a class="btn ghost" href="#/">Отмена</a></div></section>`;
-    root.querySelector('.ok-imp').addEventListener('click', () => { Store.merge(other); UI.toast('Прогресс перенесён'); location.hash = '#/'; });
+    root.querySelector('.ok-imp').addEventListener('click', () => {
+      try { Store.merge(other); } catch (err) { UI.toast('Ошибка: ' + err.message); return; }
+      // перезагрузка, чтобы словарь подхватил перенесённые свои слова
+      location.hash = '#/'; location.reload();
+    });
   }
 
   function applyTheme() {

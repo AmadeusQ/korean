@@ -21,7 +21,7 @@
     mistakes: { title: 'Мои ошибки', desc: 'Только то, в чём ошибаешься', ex: '오답', hidden: true },
     test: { title: 'Контрольная', desc: '20 вопросов по уроку без повторов', ex: '시험', hidden: true },
   };
-  const SESSION_LEN = 15, TEST_LEN = 20;
+  const SESSION_LEN = 15, TEST_LEN = 20, FILTER_LEN = 30; // выборка из словаря: до 30 слов за раз
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   const micSupported = () => !!SR;
 
@@ -36,7 +36,7 @@
   const isMistake = (key) => { const s = Store.get(key); return !!s && s.wrong > 0 && s.box <= 2; };
 
   function buildPool(mode, nums) {
-    if (mode === 'mistakes') return buildPool('mix', nums).filter((it) => isMistake(it.key));
+    if (mode === 'mistakes') return Store.keys().filter(isMistake).map((k) => resolveKey(k, nums)).filter(Boolean);
     if (mode === 'test') return buildPool('mix', nums);
     if (mode === 'write') {
       const J = unlocked(nums); const out = [];
@@ -52,7 +52,7 @@
     if (mode === 'dialog') return dialogLines(nums);
     if (mode === 'timed') return buildPool('mix', nums);
     if (mode === 'match') return buildPool('words', nums).filter((it) => it.entry.kind === 'word' && [...it.entry.ko].length <= 6);
-    if (mode === 'numbers') return ['s', 'n'].flatMap((sys) => Numbers.sample(sys, 12).map((n) => ({ group: 'numbers', key: `num:${sys}:${n}`, types: TTS.available() ? ['num-read', 'num-value', 'num-listen'] : ['num-read', 'num-value'], sys, n })));
+    if (mode === 'numbers') return ['s', 'n'].flatMap((sys) => Numbers.sample(sys, 12).map((n) => numItem(sys, n)));
     if (mode === 'shadow') return micSupported() ? sentenceLines(nums).map((l) => ({ group: 'build', key: 'shadow:' + l.ko, types: ['shadow'], line: l })) : [];
     const tts = TTS.available();
     const typing = Store.settings().typing;
@@ -106,6 +106,47 @@
       if (mode === 'mix') pool.push(...dialogLines(nums));
     }
     return uniqBy(pool, (p) => p.key);
+  }
+
+  // Числа помним по диапазонам, а не по каждому числу: иначе хранилище и ссылка переноса разрастаются
+  const numBucket = (n) => (n <= 10 ? 'small' : n < 100 ? 'mid' : 'big');
+  const numItem = (sys, n) => ({ group: 'numbers', key: `num:${sys}:${numBucket(n)}`, types: TTS.available() ? ['num-read', 'num-value', 'num-listen'] : ['num-read', 'num-value'], sys, n });
+
+  // Ключ из хранилища → задание (для «Моих ошибок»). null, если материала уже нет или он вне выбранных уроков.
+  function resolveKey(key, nums) {
+    const inLessons = (e) => e && e.lessons.some((n) => nums.includes(n));
+    const all = DB.allNums(); const J = unlocked(all); const tts = TTS.available();
+    const [kind, ...rest] = key.split(':'); const arg = rest.join(':');
+    const word = (ko) => { const e = DB.byKo.get(ko); return inLessons(e) ? e : null; };
+    switch (kind) {
+      case 'w': { const e = word(arg); if (!e) return null;
+        const t = ['ko-ru', 'ru-ko']; if (Store.settings().typing && e.kind === 'word' && [...e.ko].length <= 5) t.push('type'); if (tts) t.push('listen-word');
+        return { group: 'words', key, types: t, entry: e }; }
+      case 'j': return J.vowels.concat(J.cons).includes(arg) ? { group: 'hangul', key, types: ['jamo-read', 'syll-read', 'compose'].concat(H.NAMES[arg] && J.units.includes('names') ? ['jamo-name'] : []), jamo: arg, J } : null;
+      case 'b': { const e = word(arg); return e ? { group: 'hangul', key, types: ['batchim'], entry: e } : null; }
+      case 'g': {
+        const [gid, ...g] = rest; const val = g.join(':');
+        if (gid === 'copula' || gid === 'topic') { const e = word(val); return e ? { group: 'grammar', key, types: [gid], entry: e } : null; }
+        if (gid === 'sent') { const [pk, jk] = val.split('|'); const p = DB.byKo.get(pk), jb = DB.byKo.get(jk); return p && jb ? { group: 'grammar', key, types: ['sentence'], p, jb } : null; }
+        return null;
+      }
+      case 'build': { const l = sentenceLines(nums).find((x) => x.ko === arg); return l ? { group: 'build', key, types: ['build'], line: l } : null; }
+      case 'cloze': { const l = sentenceLines(nums).find((x) => x.ko === arg); const c = l && clozeTarget(l); return c ? { group: 'build', key, types: ['cloze'], line: l, ...c } : null; }
+      case 'dl': { for (const d of DB.dialogues(nums)) { const i = d.lines.findIndex((l, k) => k > 0 && l.ko === arg); if (i > 0) return { group: 'build', key, types: ['dialog-line'], dlg: d, i }; } return null; }
+      case 'write': {
+        if (rest[0] === 'j') { const j = rest.slice(1).join(':'); return J.vowels.concat(J.cons).includes(j) ? { group: 'write', key, types: ['write'], target: j, jamo: true } : null; }
+        const e = word(arg); return e ? { group: 'write', key, types: ['write'], target: e.ko, entry: e } : null;
+      }
+      case 'speak': { const e = word(arg); return e && micSupported() ? { group: 'speak', key, types: ['speak'], entry: e } : null; }
+      case 'shadow': { const l = sentenceLines(nums).find((x) => x.ko === arg); return l && micSupported() ? { group: 'build', key, types: ['shadow'], line: l } : null; }
+      case 'num': {
+        const [sys, b] = rest; if (!Numbers.SYSTEMS[sys]) return null;
+        const max = sys === 'n' ? 99 : 9999; const r = (lo, hi) => lo + Math.floor(Math.random() * (hi - lo + 1));
+        const n = b === 'small' ? r(1, 10) : b === 'mid' ? r(11, 99) : b === 'big' && max > 99 ? r(100, 2000) : null;
+        return n ? numItem(sys, n) : null;
+      }
+      default: return null;
+    }
   }
 
   // фразы из уроков, диалогов и примеров грамматики (от двух слов)
@@ -163,7 +204,9 @@
     const k = keyFn(correct); const seen = new Set([k]); const out = [];
     const kind = correct.kind ? DB.entries.filter((x) => x.kind === correct.kind) : [];
     for (const src of [shuffle(prefer), shuffle(all), shuffle(kind), shuffle(DB.entries)]) for (const x of src) {
-      if (out.length >= n) break; const kx = keyFn(x); if (seen.has(kx)) continue; seen.add(kx); out.push(x);
+      if (out.length >= n) break; const kx = keyFn(x); if (seen.has(kx)) continue;
+      if (x.ru === correct.ru || x.ko === correct.ko) continue; // синоним с тем же переводом был бы вторым верным ответом
+      seen.add(kx); out.push(x);
     }
     return out;
   }
@@ -178,6 +221,9 @@
     const sim = H.similarTo(j).filter((x) => same.includes(x));
     return uniqBy([...shuffle(sim), ...shuffle(same)].filter((x) => x !== j), (x) => x).slice(0, n);
   }
+  const HOMOPHONES = [['ㅙ', 'ㅚ', 'ㅞ'], ['ㅐ', 'ㅔ'], ['ㅒ', 'ㅖ']];
+  const soundsSame = (a, b, cons) => HOMOPHONES.some((g) => g.includes(a) && g.includes(b))
+    || (cons !== 'ㅇ' && [a, b].includes('ㅢ') && [a, b].includes('ㅣ'));
   function syllFor(j, J) {
     const info = H.jamoInfo(j);
     if (info.kind === 'vowel') { const c = J.cons.length ? pick(J.cons.filter((x) => x !== 'ㅇ').concat('ㅇ')) : 'ㅇ'; return { c, v: j, target: 'v' }; }
@@ -243,7 +289,9 @@
     },
     'listen-syll'(it) {
       const { c, v, target } = syllFor(it.jamo, it.J); const s = H.compose(c, v);
-      const vs = variants(it.jamo, it.J).map((x) => (target === 'v' ? H.compose(c, x) : H.compose(x, v)));
+      // на слух не различить: ㅙ/ㅚ/ㅞ, ㅐ/ㅔ, ㅒ/ㅖ, а после согласной ещё ㅢ/ㅣ (희 = 히) — такие варианты не даём
+      const vs = variants(it.jamo, it.J, 10).filter((x) => target !== 'v' || !soundsSame(x, it.jamo, c)).slice(0, 3)
+        .map((x) => (target === 'v' ? H.compose(c, x) : H.compose(x, v)));
       return { kind: 'choice', label: 'Какой слог прозвучал?', autoplay: s,
         prompt: `<button class="big-say" data-say="${s}">${icon('speaker')}</button><div class="hint">Нажми, чтобы послушать ещё раз</div>`,
         options: shuffle(uniqBy([s, ...vs], (x) => x).map((x) => ({ text: x, ok: x === s, ko: true }))),
@@ -311,7 +359,7 @@
       const t = it.target; const trace = Math.random() < 0.5;
       let task;
       if (it.jamo) { const i = H.jamoInfo(t); task = `<div class="q-ru">${esc(i.rr)} · ${esc(i.ru)}</div>${H.NAMES[t] ? `<div class="hint">буква <span class="ko">${H.NAMES[t]}</span></div>` : ''}`; }
-      else task = `<div class="q-ru">${esc(it.entry.ru)}</div><div class="hint">${esc(H.romanize(t))}</div>`;
+      else task = `<div class="q-ru">${esc(it.entry.ru)}</div>${Store.settings().romanize ? `<div class="hint">${esc(H.romanize(t))}</div>` : ''}`;
       return { kind: 'write', label: trace ? 'Обведи по образцу' : 'Напиши по памяти', prompt: task, target: t, trace, sayAfter: it.jamo ? (H.NAMES[t] || H.compose('ㅇ', t)) : t,
         explain: `<div class="ex-line"><span class="ko serif">${esc(t)}</span>${it.entry ? ` — ${esc(it.entry.ru)}` : ''}</div>` };
     },
@@ -383,13 +431,23 @@
     if (mode === 'match') return startMatch(root, nums, pool);
     const isTest = mode === 'test', isTimed = mode === 'timed';
     const TIME = 5 * 60 * 1000; const t0 = Date.now(); let timeUp = false, timer = null;
-    const queue = mode === 'dialog' ? dialogQueue(nums) : choose(pool, isTest ? TEST_LEN : isTimed ? 80 : SESSION_LEN, isTimed ? 'mix' : mode);
+    const queue = mode === 'dialog' ? dialogQueue(nums) : choose(pool, isTest ? TEST_LEN : isTimed ? 80 : filtered ? Math.min(pool.length, FILTER_LEN) : SESSION_LEN, isTimed ? 'mix' : mode);
     const introduced = new Set(); let introCount = 0;
     const introOk = !['cards', 'test', 'mistakes', 'timed'].includes(mode);
     const retried = new Set();
     const results = [];
     const marks = [];
     let idx = 0, q = null, answered = false;
+    // alive: сессия ещё на экране; stepping: переход к следующему вопросу уже запущен (защита от двойного нажатия)
+    let alive = true, stepping = false;
+    const later = (fn, ms) => setTimeout(() => { if (alive) fn(); }, ms);
+    // tok — номер вопроса, к которому относится кнопка: клик по устаревшей кнопке ничего не делает
+    function step(fn, tok) {
+      if (stepping || !alive || (tok !== undefined && tok !== idx)) return;
+      stepping = true;
+      if (fn) fn();
+      idx++; next();
+    }
     document.body.classList.add('in-session');
 
     root.innerHTML = `
@@ -429,12 +487,12 @@
       const e = it.entry;
       const ex = sentenceLines(DB.allNums()).find((l) => l.ko.split(/\s+/).some((t) => t.startsWith(e.ko)) && l.ko !== e.ko);
       $body.innerHTML = `<div class="q-label">Новое слово</div><div class="q-prompt intro">${UI.cells(e.ko, 'big')}${sayBtn(e.ko)}
-        <div class="rr">${esc(H.romanize(e.ko))}</div><div class="q-ru">${esc(e.ru)}</div>
+        ${UI.rr(e.ko)}<div class="q-ru">${esc(e.ru)}</div>
         ${ex ? `<div class="intro-ex"><span class="ko">${esc(ex.ko)}</span><span class="muted sm">${esc(ex.ru)}</span></div>` : ''}</div>`;
       $foot.innerHTML = '<button class="btn wide next">Запомнил</button>';
-      setTimeout(() => TTS.speak(e.ko), 250);
+      later(() => TTS.speak(e.ko), 250);
       answered = true; q = { kind: 'intro', item: it };
-      $foot.querySelector('.next').addEventListener('click', () => { marks[idx] = 'intro'; idx++; next(); });
+      const tok = idx; $foot.querySelector('.next').addEventListener('click', () => step(() => { marks[idx] = 'intro'; }, tok));
     }
 
     // Перелистывание: текущая страница уходит влево, новая въезжает справа
@@ -445,13 +503,14 @@
       if (!$body.firstChild || reduce) return show();
       turning = true;
       $body.classList.add('leave'); $foot.classList.add('leave');
-      setTimeout(() => {
+      later(() => {
         turning = false; $body.classList.remove('leave'); $foot.classList.remove('leave');
         show();
         $body.classList.remove('enter'); void $body.offsetWidth; $body.classList.add('enter');
       }, 140);
     }
     function show() {
+      stepping = false;
       if (idx >= queue.length || timeUp) return finish();
       const it = queue[idx];
       if (introOk && it.entry && it.group === 'words' && !Store.get(it.key) && !introduced.has(it.key) && introCount < 5) {
@@ -468,7 +527,7 @@
       else if (q.kind === 'card') renderCard();
       else if (q.kind === 'write') renderWrite();
       else if (q.kind === 'speak') renderSpeak();
-      if (q.autoplay) setTimeout(() => TTS.speak(q.autoplay), 250);
+      if (q.autoplay) later(() => TTS.speak(q.autoplay), 250);
     }
 
     function head() { return `<div class="q-label">${esc(q.label)}</div><div class="q-prompt">${q.prompt}</div>`; }
@@ -507,6 +566,7 @@
 
     // Прописи: рисуем в клетках, потом сравниваем с образцом и оцениваем себя
     function renderWrite() {
+      const tok = idx;
       const chars = [...q.target];
       $body.innerHTML = head() + `<div class="write-cells ${chars.length > 2 ? 'small' : ''}">${chars.map((c) => `<div class="wcell"><span class="wguide ${q.trace ? 'on' : ''}">${esc(c)}</span><canvas></canvas></div>`).join('')}</div>
         <div class="row write-tools"><button type="button" class="btn ghost sm clr">Стереть</button><button type="button" class="btn ghost sm tg">${q.trace ? 'Скрыть образец' : 'Подсказка'}</button></div>`;
@@ -523,7 +583,7 @@
         $body.querySelector('.write-tools').remove();
         if (q.sayAfter) TTS.speak(q.sayAfter);
         $foot.innerHTML = `<div class="hint center">Сравни свою букву с образцом (красный контур)</div><div class="grade"><button class="btn bad" data-g="0">Не похоже</button><button class="btn good" data-g="1">Похоже</button></div>`;
-        $foot.querySelectorAll('[data-g]').forEach((b) => b.addEventListener('click', () => { answered = true; record(b.dataset.g === '1'); idx++; next(); }));
+        $foot.querySelectorAll('[data-g]').forEach((b) => b.addEventListener('click', () => step(() => { answered = true; record(b.dataset.g === '1'); }, tok)));
       });
     }
     function draw(cv) {
@@ -591,16 +651,17 @@
       return days < 1 ? '½ дня' : `${days} ${days === 1 ? 'день' : days < 5 ? 'дня' : 'дней'}`;
     }
     function renderCard() {
+      const tok = idx;
       const e = q.entry; const koFront = q.front === 'ko';
       const front = koFront ? UI.cells(e.ko, 'big') : `<div class="q-ru">${esc(e.ru)}</div>`;
       const back = `<div class="card-back">${UI.cells(e.ko, 'big')}${UI.rr(e.ko)}<div class="q-ru sm">${esc(e.ru)}</div>${sayBtn(e.ko)}</div>`;
       $body.innerHTML = `<div class="q-label">${koFront ? 'Вспомни перевод' : 'Вспомни по-корейски'}</div><div class="flash"><div class="flash-front">${front}${koFront ? sayBtn(e.ko) : ''}</div></div>`;
-      if (koFront) setTimeout(() => TTS.speak(e.ko), 200);
+      if (koFront) later(() => TTS.speak(e.ko), 200);
       $foot.innerHTML = `<button class="btn wide reveal">Показать ответ</button>`;
       $foot.querySelector('.reveal').addEventListener('click', () => {
         $body.querySelector('.flash').innerHTML = back; if (!koFront) TTS.speak(e.ko);
         $foot.innerHTML = `<div class="grade four"><button class="btn bad" data-g="0">Снова<small>сейчас</small></button><button class="btn ghost" data-g="1">Трудно<small>${ivl(1)}</small></button><button class="btn good" data-g="2">Хорошо<small>${ivl(2)}</small></button><button class="btn ghost" data-g="3">Легко<small>${ivl(3)}</small></button></div>`;
-        $foot.querySelectorAll('[data-g]').forEach((b) => b.addEventListener('click', () => { answered = true; record(+b.dataset.g > 0, +b.dataset.g); idx++; next(); }));
+        $foot.querySelectorAll('[data-g]').forEach((b) => b.addEventListener('click', () => step(() => { answered = true; record(+b.dataset.g > 0, +b.dataset.g); }, tok)));
       });
     }
 
@@ -619,11 +680,12 @@
       $foot.innerHTML = `<div class="fb"><div class="fb-title">${ok ? pick(['맞아요', '좋아요', '잘했어요']) + ' <small>верно</small>' : '틀렸어요 <small>правильный ответ</small>'}</div>
         <div class="fb-ex">${q.explain || ''}</div></div><button class="btn wide next">Дальше</button>`;
       const nb = $foot.querySelector('.next');
-      let gone = false; const go = () => { if (gone) return; gone = true; idx++; next(); };
+      const tok = idx; const go = () => step(undefined, tok);
       nb.addEventListener('click', go); nb.focus({ preventScroll: true });
     }
 
     function finish() {
+      if (!alive) return;
       clearInterval(timer);
       document.body.classList.remove('in-session');
       document.removeEventListener('keydown', onKey);
@@ -659,16 +721,16 @@
       if (q?.kind === 'intro' && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); $foot.querySelector('.next')?.click(); }
     }
     document.addEventListener('keydown', onKey);
-    start.cleanup = () => { clearInterval(timer); document.removeEventListener('keydown', onKey); document.body.classList.remove('in-session'); };
+    start.cleanup = () => { alive = false; clearInterval(timer); window.speechSynthesis?.cancel(); document.removeEventListener('keydown', onKey); document.body.classList.remove('in-session'); };
     next();
   }
 
   // ---------- «Найди пары»: 3 раунда по 6 пар на время ----------
   function startMatch(root, nums, pool) {
     const ROUNDS = 3, PAIRS = 6;
-    const items = choose(pool, ROUNDS * PAIRS, 'words');
+    const items = uniqBy(choose(uniqBy(pool, (it) => it.entry.ru), ROUNDS * PAIRS, 'words'), (it) => it.entry.ru);
     if (items.length < PAIRS) { root.innerHTML = '<section class="empty">Слишком мало слов для игры.<br><a class="btn" href="#/practice">Назад</a></section>'; return; }
-    const t0 = Date.now(); let round = 0, misses = 0, timer = null; const missed = new Set();
+    const t0 = Date.now(); let round = 0, misses = 0, timer = null, alive = true; const missed = new Set();
     document.body.classList.add('in-session');
     root.innerHTML = `<section class="session match">
       <header class="s-top"><button class="icon-btn quit" type="button" aria-label="Выйти">${icon('close')}</button><div class="segs"></div><span class="s-count">0:00</span></header>
@@ -695,7 +757,7 @@
         if (a.dataset.k === b.dataset.k) {
           a.classList.add('done'); b.classList.add('done');
           if (!missed.has(a.dataset.k)) Store.answer(a.dataset.k, true);
-          if (--left_ === 0) { round++; round < rounds ? setTimeout(drawRound, 350) : setTimeout(end, 350); }
+          if (--left_ === 0) { round++; setTimeout(() => { if (alive) (round < rounds ? drawRound : end)(); }, 350); }
         } else {
           misses++; [a, b].forEach((x) => { x.classList.add('miss'); setTimeout(() => x.classList.remove('miss'), 400); });
           if (!missed.has(koBtn.dataset.k)) { missed.add(koBtn.dataset.k); Store.answer(koBtn.dataset.k, false); }
@@ -713,7 +775,7 @@
         <p class="muted">${rounds * PAIRS} пар · ошибок: ${misses}${record ? ' · новый рекорд без ошибок' : best ? ` · рекорд без ошибок ${fmt(best)}` : ''}</p>
         <div class="row"><a class="btn" href="#/practice/match?l=${nums.join(',')}&r=${Date.now()}">Ещё раз</a><a class="btn ghost" href="#/">На главную</a></div></section>`;
     }
-    start.cleanup = () => { clearInterval(timer); document.body.classList.remove('in-session'); };
+    start.cleanup = () => { alive = false; clearInterval(timer); window.speechSynthesis?.cancel(); document.body.classList.remove('in-session'); };
     drawRound();
   }
 
