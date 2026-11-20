@@ -35,7 +35,7 @@
           <h1 class="serif">오늘의 공부</h1>
           <p class="muted">${st.n >= goal ? 'Цель на сегодня выполнена.' : `Сегодня ${st.n} из ${goal} ответов.`}
             ${streak ? ` ${plural(streak, 'день', 'дня', 'дней')} подряд.` : ''}</p>
-          <div class="goal-cells" aria-label="Цель дня">${Array.from({ length: CELLS }, (_, i) => `<span class="${i < filled ? 'on' : ''}"></span>`).join('')}</div>
+          <div class="goal-bar" role="progressbar" aria-label="Цель дня" aria-valuemin="0" aria-valuemax="${goal}" aria-valuenow="${Math.min(st.n, goal)}"><i style="width:${Math.min(100, Math.round((st.n / goal) * 100))}%"></i></div>
           <div class="row">
             <a class="btn" href="#/practice/mix">Начать тренировку</a>
             <span class="muted sm">${due ? `${plural(due, 'слово ждёт', 'слова ждут', 'слов ждут')} повторения` : 'Повторять пока нечего — можно учить новое'}${tomorrow ? ` · завтра ещё ${tomorrow}` : ''}</span>
