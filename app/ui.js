@@ -64,10 +64,15 @@
   // Картинка к слову (data/pictures.js): только там, где перевод уже виден, чтобы не подсказывать ответ
   const pic = (ko, cls = '') => {
     const d = window.PICTURE_ICONS?.[window.PICTURES?.[ko]];
-    return d ? `<svg class="pic ${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>` : '';
+    if (!d) return '';
+    // Phosphor — залитые контуры на сетке 256, остальные — линии на сетке 24
+    if (typeof d === 'object') return `<svg class="pic ${cls}" viewBox="0 0 ${d.box} ${d.box}" fill="currentColor" aria-hidden="true">${d.body}</svg>`;
+    return `<svg class="pic ${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
   };
+  // Своя подсказка к слову (ассоциация) — показывается вместе с переводом
+  const note = (ko) => { const t = Store.note(ko); return t ? `<div class="ex-note"><span class="muted xs">Твоя подсказка</span> ${esc(t)}</div>` : ''; };
   // Печать 도장
   const stamp = (text) => `<div class="stamp" aria-label="${esc(text)}"><span>${esc(text)}</span></div>`;
 
-  window.UI = { esc, shuffle, pick, uniqBy, icon, sayBtn, pr, rr, toast, say, strength, cells, stamp, pic };
+  window.UI = { esc, shuffle, pick, uniqBy, icon, sayBtn, pr, rr, toast, say, strength, cells, stamp, pic, note };
 })();

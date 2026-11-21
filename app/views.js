@@ -263,12 +263,14 @@
       ${Store.settings().romanize ? `<div class="rr sheet-rr">${esc(H.romanize(e.ko))}</div>` : ''}
       <div class="sheet-ru">${esc(e.ru)}</div>
       <div class="muted sm">${esc(e.c)} · ${e.lessons.map((n) => (n === 0 ? 'мои слова' : `<a class="link" href="#/lesson/${n}">제${n}과</a>`)).join(', ')}</div>
-      <div class="sheet-stats">${s ? `${strength(e.key)} <span class="sm">верно ${s.right}, ошибок ${s.wrong}</span>` : '<span class="sm muted">Ещё не тренировалось</span>'}</div>
+      <div class="sheet-stats">${s ? `${strength(e.key)} <span class="sm">верно ${s.right}, ошибок ${s.wrong}</span>${Store.isHard(e.key) ? ' <b class="hard sm">трудное</b>' : ''}` : '<span class="sm muted">Ещё не тренировалось</span>'}</div>
+      <label class="note-field"><span class="sm">Своя подсказка</span><textarea class="note-in" maxlength="200" rows="2" placeholder="Ассоциация, чтобы запомнить. Например: 곰 — «гом», медведь">${esc(Store.note(e.ko))}</textarea><span class="muted xs">Покажется вместе с переводом в карточках и после ответа.</span></label>
       ${e.mine ? '<button class="btn sm danger del-word" type="button">Удалить из моих слов</button>' : ''}
       ${ex.length ? `<h2 class="h">Встречается во фразах</h2>${ex.map((l) => `<div class="exm"><div><span class="ko">${esc(l.ko)}</span><div class="muted sm">${esc(l.ru)}</div></div>${sayBtn(l.ko, 'sm')}</div>`).join('')}` : ''}
     </div>`;
     const close = () => { box.remove(); document.removeEventListener('keydown', key); };
     const key = (ev) => { if (ev.key === 'Escape') close(); };
+    box.querySelector('.note-in').addEventListener('input', (ev) => Store.setNote(e.ko, ev.target.value));
     box.querySelector('.del-word')?.addEventListener('click', () => {
       if (!confirm(`Удалить «${e.ko}» из своих слов?`)) return;
       DB.removeCustom(e.ko); close(); UI.toast('Удалено'); if (location.hash.startsWith('#/dict')) dict(document.getElementById('view'));
@@ -301,7 +303,7 @@
   document.addEventListener('click', (ev) => { const b = ev.target.closest('[data-rule]'); if (b) { ev.preventDefault(); ruleSheet(b.dataset.rule); } });
 
   // ---------- Словарь ----------
-  const dictState = { q: '', lesson: 'all', cat: 'all', sort: 'lesson' };
+  const dictState = { q: '', lesson: 'all', cat: 'all', sort: 'lesson', hard: false };
   function dict(root) {
     root.innerHTML = `<h1 class="page-title">Словарь <span class="muted count"></span></h1>
       <div class="filters">
@@ -310,7 +312,7 @@
         <select class="f-cat"><option value="all">Все темы</option>${DB.categories().map((c) => `<option>${esc(c)}</option>`).join('')}</select>
         <select class="f-sort"><option value="lesson">По урокам</option><option value="abc">По алфавиту</option><option value="weak">Сначала слабые</option></select>
       </div>
-      <div class="row dict-actions"><a class="btn sm ghost" id="dict-cards" href="#/practice/cards">Карточки по этой выборке</a><button class="btn sm ghost add-word" type="button">+ Своё слово</button></div>
+      <div class="row dict-actions"><a class="btn sm ghost" id="dict-cards" href="#/practice/cards">Карточки по этой выборке</a><button class="btn sm ghost add-word" type="button">+ Своё слово</button><button class="btn sm ghost only-hard" type="button" aria-pressed="false"></button></div>
       <form class="card form add-form" hidden>
         <h3>Новое слово</h3>
         <label class="field"><span>По-корейски</span><input class="aw-ko" lang="ko" maxlength="60" required autocomplete="off" placeholder="한글로…"></label>
@@ -323,20 +325,26 @@
     $('.f-lesson').value = dictState.lesson; $('.f-cat').value = dictState.cat; $('.f-sort').value = dictState.sort;
     const draw = () => {
       const q = dictState.q.trim().toLowerCase();
-      const filter = { c: dictState.cat === 'all' ? '' : dictState.cat, q };
+      const filter = { c: dictState.cat === 'all' ? '' : dictState.cat, q, hard: dictState.hard };
+      const nHard = DB.entries.filter((e) => Store.isHard(e.key)).length;
+      if (!nHard) dictState.hard = filter.hard = false;
+      $('.only-hard').hidden = !nHard; $('.only-hard').textContent = `Трудные · ${nHard}`;
+      $('.only-hard').classList.toggle('on', dictState.hard); $('.only-hard').setAttribute('aria-pressed', dictState.hard);
       let list = DB.entries.filter((e) => (dictState.lesson === 'all' || e.lessons.includes(+dictState.lesson)) && DB.matches(e, filter));
       if (dictState.sort === 'abc') list = list.slice().sort((a, b) => a.ko.localeCompare(b.ko, 'ko'));
       if (dictState.sort === 'weak') list = list.slice().sort((a, b) => Store.box(a.key) - Store.box(b.key));
       $('.count').textContent = list.length;
       // карточки ровно по тому, что сейчас видно в словаре: урок + тема + поиск
       const p = new URLSearchParams();
-      if (dictState.lesson !== 'all') p.set('l', dictState.lesson);
+      // трудные могут быть в любом уроке, а без l= тренировка берёт только открытые уроки
+      if (dictState.lesson !== 'all') p.set('l', dictState.lesson); else if (filter.hard) p.set('l', DB.allNums().join(','));
       if (filter.c) p.set('c', filter.c);
+      if (filter.hard) p.set('h', '1');
       if (q) p.set('q', q);
       $('#dict-cards').href = `#/practice/cards${p.toString() ? '?' + p : ''}`;
       $('#dict-cards').textContent = `Карточки по этой выборке · ${list.length > 30 ? `30 из ${list.length}` : list.length}`;
       const row = (e) => `<div class="wrow" data-ko="${esc(e.ko)}"><div class="w-ko"><span class="ko serif">${esc(e.ko)}</span>${UI.rr(e.ko)}</div>
-        <div class="w-ru">${esc(e.ru)}<div class="w-meta">${esc(e.c)} · ${e.lessons.map((n) => (n === 0 ? 'мои' : `제${n}과`)).join(', ')}</div></div><span class="wpic">${UI.pic(e.ko)}</span>${strength(e.key)}${sayBtn(e.ko, 'sm')}</div>`;
+        <div class="w-ru">${esc(e.ru)}<div class="w-meta">${Store.isHard(e.key) ? '<b class="hard">трудное</b> · ' : ''}${esc(e.c)} · ${e.lessons.map((n) => (n === 0 ? 'мои' : `제${n}과`)).join(', ')}</div></div><span class="wpic">${UI.pic(e.ko)}</span>${strength(e.key)}${sayBtn(e.ko, 'sm')}</div>`;
       const groupOf = dictState.sort === 'abc' ? (e) => { const d = H.decompose(e.ko[0]); return d ? d.cho : e.ko[0]; }
         : dictState.sort === 'lesson' ? (e) => lessonName(e.lesson) : null;
       if (dictState.sort === 'lesson') list = list.slice().sort((a, b) => a.lesson - b.lesson);
@@ -349,6 +357,7 @@
     $('.f-lesson').addEventListener('change', (e) => { dictState.lesson = e.target.value; draw(); });
     $('.f-cat').addEventListener('change', (e) => { dictState.cat = e.target.value; draw(); });
     $('.f-sort').addEventListener('change', (e) => { dictState.sort = e.target.value; draw(); });
+    $('.only-hard').addEventListener('click', () => { dictState.hard = !dictState.hard; draw(); });
     const form = $('.add-form');
     $('.add-word').addEventListener('click', () => { form.hidden = !form.hidden; if (!form.hidden) $('.aw-ko').focus(); });
     $('.aw-cancel').addEventListener('click', () => { form.hidden = true; });
@@ -404,6 +413,11 @@
     upd();
   }
 
+  // Трудные слова (много ошибок за всё время): карточками, по всем урокам
+  function hardLink() {
+    const n = DB.entries.filter((e) => Store.isHard(e.key)).length;
+    return n ? `<a class="btn ghost" href="#/practice/cards?l=${DB.allNums().join(',')}&h=1">Трудные слова · ${n}</a>` : '';
+  }
   function mistakesBlock(nums) {
     const list = Practice.mistakes(nums);
     const label = (it) => it.entry ? `<span class="ko">${esc(it.entry.ko)}</span> — ${esc(it.entry.ru)}`
@@ -415,7 +429,7 @@
     const q = String(nums) === String(DB.openNums()) ? '' : `?l=${nums.join(',')}`;
     return `<section class="block mistakes"><h2 class="h">Мои ошибки</h2>
       ${list.length ? `<div class="mist-list">${list.slice(0, 8).map((it) => `<div class="mist-row"><span>${label(it)}</span><span class="muted xs">ошибок: ${it.s.wrong}</span></div>`).join('')}</div>
-        <div class="row"><a class="btn" href="#/practice/mistakes${q}">Тренировать ошибки · ${list.length}</a></div>`
+        <div class="row"><a class="btn" href="#/practice/mistakes${q}">Тренировать ошибки · ${list.length}</a>${hardLink()}</div>`
         : '<p class="muted sm">Пока ошибок нет. Здесь появится то, в чём ты ошибаешься чаще всего.</p>'}</section>`;
   }
 

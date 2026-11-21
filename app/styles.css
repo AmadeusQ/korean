@@ -461,3 +461,11 @@ details { margin: 8px 0; font-size: 14px; } summary { cursor: pointer; color: va
 .pic.sm { width: 22px; height: 22px; color: var(--muted); } .pic.md { width: 48px; height: 48px; } .pic.lg { width: 64px; height: 64px; }
 .wpic { flex: 0 0 24px; display: flex; color: var(--muted); } .wpic .pic { width: 22px; height: 22px; color: inherit; }
 .sheet-head .pic { margin-left: auto; margin-right: 36px; }
+
+/* своя подсказка и трудные слова */
+.ex-note { margin-top: 6px; padding: 6px 10px; border-left: 2px solid var(--accent); background: var(--accent-soft); border-radius: 0 var(--r) var(--r) 0; font-size: 14px; text-align: left; }
+.ex-note .muted { display: block; }
+.note-field { display: flex; flex-direction: column; gap: 4px; margin: 12px 0; }
+.note-field textarea { font: inherit; font-size: 15px; padding: 8px 10px; border: 1px solid var(--line); border-radius: var(--r); background: var(--paper); color: inherit; resize: vertical; }
+.hard { color: var(--red); font-weight: 500; }
+.only-hard.on { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }

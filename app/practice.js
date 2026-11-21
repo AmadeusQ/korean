@@ -370,7 +370,7 @@
   const numExplain = (it) => { const S = Numbers.SYSTEMS[it.sys]; const r = S.read(it.n); return `<div class="ex-line"><b>${it.n}</b> = <span class="ko">${r}</span>${sayBtn(r, 'sm')}</div><div class="ex-ru">${S.title}: ${S.use}</div><div class="ex-rule"><button type="button" class="link" data-rule="numbers">Как устроены числа →</button></div>`; };
   const RULE_NAME = { topic: '은/는', copula: '이에요/예요', yesno: '네/아니요' };
   const ruleBtn = (id) => `<button type="button" class="link" data-rule="${id}">Правило${RULE_NAME[id] ? ' ' + RULE_NAME[id] : ''} →</button>`;
-  const entryExplain = (e) => `<div class="ex-line"><span class="ko">${esc(e.ko)}</span>${UI.rr(e.ko)}${sayBtn(e.ko, 'sm')}${UI.pic(e.ko, 'sm')}</div><div class="ex-ru">${esc(e.ru)}</div>`;
+  const entryExplain = (e) => `<div class="ex-line"><span class="ko">${esc(e.ko)}</span>${UI.rr(e.ko)}${sayBtn(e.ko, 'sm')}${UI.pic(e.ko, 'sm')}</div><div class="ex-ru">${esc(e.ru)}</div>${UI.note(e.ko)}`;
   // Знаки препинания в вариантах и плашках подсказывали ответ (вопрос — тот, что с «?», плашка с точкой — последняя)
   const bare = (s) => s.replace(/[.,!?…]/g, '').replace(/\s+/g, ' ').trim();
   const tail = (s) => s.replace(/[.?!…]+$/, '');
@@ -678,16 +678,17 @@
 
   // ---------- экран тренировки ----------
   function start(root, mode, nums, filter = {}) {
-    const filtered = !!(filter.c || filter.q || filter.intro);
+    const filtered = !!(filter.c || filter.q || filter.intro || filter.hard);
     // выборка из словаря (тема и поиск) или только свой рассказ о себе
     const mine = new Set(introLines().flatMap(splitLine).concat(introLines()).map((l) => l.ko));
     const pool = !filtered ? buildPool(mode, nums)
       : filter.intro ? buildPool(mode, nums).filter((it) => it.line && mine.has(it.line.ko))
       : buildPool(mode, nums).filter((it) => it.entry && DB.matches(it.entry, filter));
-    const again = `#/practice/${mode}?l=${nums.join(',')}${filter.c ? '&c=' + encodeURIComponent(filter.c) : ''}${filter.q ? '&q=' + encodeURIComponent(filter.q) : ''}${filter.intro ? '&s=intro' : ''}`;
+    const again = `#/practice/${mode}?l=${nums.join(',')}${filter.c ? '&c=' + encodeURIComponent(filter.c) : ''}${filter.q ? '&q=' + encodeURIComponent(filter.q) : ''}${filter.intro ? '&s=intro' : ''}${filter.hard ? '&h=1' : ''}`;
     if (!pool.length) {
       const why = mode === 'mistakes' ? 'Ошибок пока нет — сначала потренируйся в других режимах.'
         : filter.intro ? 'Сначала напиши, как тебя зовут, на странице «Расскажи о себе».'
+        : filter.hard ? 'Трудных слов нет: трудным считается слово, в котором ошибся хотя бы 3 раза.'
         : mode === 'speak' && !micSupported() ? 'Этот браузер не умеет распознавать речь. Попробуй Chrome на компьютере или Android.'
         : MODES[mode].tts && !TTS.available() ? 'Для аудирования нужен корейский голос. Как его включить — в «Настройках».'
         : 'Для этого режима пока нет материала в выбранных уроках.';
@@ -757,7 +758,7 @@
       const upTo = Math.max(...e.lessons) || Infinity;
       const ex = sentenceLines(DB.allNums().filter((n) => n > 0 && n <= upTo)).find((l) => l.ko.split(/\s+/).some((t) => t.startsWith(e.ko)) && l.ko !== e.ko);
       $body.innerHTML = `<div class="q-label">Новое слово</div><div class="q-prompt intro">${UI.pic(e.ko, 'lg')}${UI.cells(e.ko, 'big')}${sayBtn(e.ko)}
-        ${UI.rr(e.ko)}<div class="q-ru">${esc(e.ru)}</div>
+        ${UI.rr(e.ko)}<div class="q-ru">${esc(e.ru)}</div>${UI.note(e.ko)}
         ${ex ? `<div class="intro-ex"><span class="ko">${esc(ex.ko)}</span><span class="muted sm">${esc(ex.ru)}</span></div>` : ''}</div>`;
       $foot.innerHTML = '<button class="btn wide next">Запомнил</button>';
       later(() => TTS.speak(e.ko), 250);
@@ -947,7 +948,7 @@
       const tok = idx;
       const e = q.entry; const koFront = q.front === 'ko';
       const front = koFront ? UI.cells(e.ko, 'big') : `<div class="q-ru">${esc(e.ru)}</div>`;
-      const back = `<div class="card-back">${UI.pic(e.ko, 'lg')}${UI.cells(e.ko, 'big')}${UI.rr(e.ko)}<div class="q-ru sm">${esc(e.ru)}</div>${sayBtn(e.ko)}</div>`;
+      const back = `<div class="card-back">${UI.pic(e.ko, 'lg')}${UI.cells(e.ko, 'big')}${UI.rr(e.ko)}<div class="q-ru sm">${esc(e.ru)}</div>${UI.note(e.ko)}${sayBtn(e.ko)}</div>`;
       $body.innerHTML = `<div class="q-label">${koFront ? 'Вспомни перевод' : 'Вспомни по-корейски'}</div><div class="flash"><div class="flash-front">${front}${koFront ? sayBtn(e.ko) : ''}</div></div>`;
       if (koFront) later(() => TTS.speak(e.ko), 200);
       $foot.innerHTML = `<button class="btn wide reveal">Показать ответ</button>`;

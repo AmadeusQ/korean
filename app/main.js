@@ -22,7 +22,7 @@
       case 'intro': return Views.intro(view);
       case 'progress': return Views.progress(view);
       case 'practice':
-        if (parts[1] && Practice.MODES[parts[1]]) return Practice.start(view, parts[1], nums, { c: params.get('c') || '', q: params.get('q') || '', intro: params.get('s') === 'intro' });
+        if (parts[1] && Practice.MODES[parts[1]]) return Practice.start(view, parts[1], nums, { c: params.get('c') || '', q: params.get('q') || '', intro: params.get('s') === 'intro', hard: params.get('h') === '1' });
         return Views.practiceMenu(view);
       default: return Views.home(view);
     }

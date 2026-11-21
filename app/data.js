@@ -46,6 +46,7 @@
     // фильтр словаря: тема c и поиск q (по-корейски, по-русски или латиницей)
     matches(e, f = {}) {
       if (f.c && e.c !== f.c) return false;
+      if (f.hard && !Store.isHard(e.key)) return false;
       const q = (f.q || '').trim().toLowerCase();
       return !q || e.ko.includes(q) || e.ru.toLowerCase().includes(q) || Hangul.romanize(e.ko).includes(q.replace(/[\s-]/g, ''));
     },
