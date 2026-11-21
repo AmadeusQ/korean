@@ -27,6 +27,9 @@
   // «Перед тобой: …» — только то, что можно показать (не «низ» или «причина»)
   const YESNO_C = ['Вещи', 'Еда', 'Животные', 'Природа', 'Профессии', 'Люди', 'Тело'];
   const showable = (e) => e.kind === 'word' && !e.t && !/\s/.test(e.ko) && YESNO_C.includes(e.c) && (e.c !== 'Люди' || e.p);
+  // Какой вопрос подходит к ответу: о человеке, предмете, профессии, стране
+  const WH = { who: '누구예요?', what: '뭐예요?', job: '직업이 뭐예요?', nat: '어느 나라 사람이에요?' };
+  const whOf = (e) => (e.c === 'Страны' && e.gen ? 'nat' : e.job ? 'job' : !showable(e) ? null : e.p ? 'who' : e.c === 'Люди' ? null : 'what');
   const SESSION_LEN = 15, TEST_LEN = 20, FILTER_LEN = 30; // выборка из словаря: до 30 слов за раз
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   const micSupported = () => !!SR;
@@ -107,6 +110,8 @@
       const nouns = entries.filter((e) => e.kind === 'word' && !e.t);
       const persons = entries.filter((e) => e.p), jobs = entries.filter((e) => e.job);
       if (gids.includes('copula')) shuffle(nouns).slice(0, 25).forEach((e) => add('grammar', 'g:copula:' + e.ko, ['copula'], { entry: e }));
+      // 누구예요? / 뭐예요? — с урока, где эти вопросы появились
+      if (entries.some((e) => e.ko === '누구예요?')) shuffle(entries.filter((e) => e.kind === 'word' && whOf(e))).slice(0, 16).forEach((e) => add('grammar', 'g:wh:' + e.ko, ['wh'], { entry: e }));
       if (gids.includes('yesno')) shuffle(nouns.filter(showable)).slice(0, 20).forEach((e) => add('grammar', 'g:yesno:' + e.ko, ['yesno'], { entry: e }));
       if (gids.includes('topic')) {
         shuffle([...persons, ...nouns]).slice(0, 20).forEach((e) => add('grammar', 'g:topic:' + e.ko, ['topic'], { entry: e }));
@@ -128,6 +133,11 @@
         const persons = entries.filter((e) => e.p), jobs = entries.filter((e) => e.job);
         for (let i = 0; i < 10 && persons.length && jobs.length; i++) {
           const l = pairLine(pick(persons), pick(jobs));
+          add('build', 'tr:' + l.ko, ['translate'], { line: l, toks: l.toks });
+        }
+        const lands = entries.filter((e) => e.c === 'Страны' && e.gen);
+        for (let i = 0; i < 8 && persons.length && lands.length; i++) {
+          const l = natLine(pick(persons), pick(lands));
           add('build', 'tr:' + l.ko, ['translate'], { line: l, toks: l.toks });
         }
       }
@@ -154,6 +164,7 @@
       case 'b': { const e = word(arg); return e ? { group: 'hangul', key, types: ['batchim'], entry: e } : null; }
       case 'g': {
         const [gid, ...g] = rest; const val = g.join(':');
+        if (gid === 'wh') { const e = word(val); return e && whOf(e) ? { group: 'grammar', key, types: ['wh'], entry: e } : null; }
         if (gid === 'copula' || gid === 'topic' || gid === 'yesno') { const e = word(val); return e ? { group: 'grammar', key, types: [gid], entry: e } : null; }
         if (gid === 'sent') { const [pk, jk] = val.split('|'); const p = word(pk), jb = word(jk); return p?.p && jb?.job ? { group: 'grammar', key, types: ['sentence'], p, jb } : null; }
         return null;
@@ -164,11 +175,14 @@
         const l = translateLines(nums).find((x) => x.ko === arg);
         if (l) return { group: 'build', key, types: ['translate'], line: l, toks: l.toks };
         // предложение «X은/는 Y이에요» собиралось из слов урока, а не из готовых фраз
-        const m = arg.match(/^(.+?)(은|는) (.+)(이에요|예요)\.$/); const p = m && word(m[1]), jb = m && word(m[3]);
+        const m = arg.match(/^(.+?)(은|는) (.+)(이에요|예요)\.$/);
+        const land = m && /^\S+ 사람$/.test(m[3]) && word(m[3].slice(0, -3));
+        if (land) { const p = word(m[1]); if (!p?.p || !land.gen) return null; const nl = natLine(p, land); return { group: 'build', key, types: ['translate'], line: nl, toks: nl.toks }; }
+        const p = m && word(m[1]), jb = m && word(m[3]);
         if (!p || !jb || !p.p || !jb.job) return null;
         const pl = pairLine(p, jb); return { group: 'build', key, types: ['translate'], line: pl, toks: pl.toks };
       }
-      case 'rd': return readItems(nums).find((x) => x.key === key) || null;
+      case 'rd': case 'tf': return readItems(nums).find((x) => x.key === key) || null;
       case 'dl': { for (const d of DB.dialogues(nums)) { const i = d.lines.findIndex((l, k) => k > 0 && l.ko === arg); if (i > 0) return { group: 'build', key, types: ['dialog-line'], dlg: d, i }; } return null; }
       case 'write': {
         if (rest[0] === 'j') { const j = rest.slice(1).join(':'); return J.vowels.concat(J.cons).includes(j) ? { group: 'write', key, types: ['write'], target: j, jamo: true } : null; }
@@ -193,12 +207,24 @@
     const k = sentences(l.ko), r = sentences(l.ru);
     return k.length > 1 && k.length === r.length ? k.map((ko, i) => ({ ko, ru: r[i] })) : [l];
   }
+  // Свой рассказ о себе (자기소개) из имени, страны и профессии ученика: 3 предложения для сборки, перевода и повтора
+  const introLesson = () => DB.lessons.find((l) => l.words.some((w) => w.ko === '자기소개'))?.number;
+  function introLines() {
+    const m = Store.intro(); if (!m || !m.name) return [];
+    const land = DB.byKo.get(m.country), job = DB.byKo.get(m.job);
+    return [
+      { ko: `안녕하세요? 저는 ${m.name}${H.copula(m.name)}.`, ru: `Здравствуйте! Я ${m.name}.` },
+      land?.gen && { ko: `저는 ${land.ko} 사람이에요.`, ru: `Я из ${land.gen}.` },
+      job?.job && { ko: `저는 ${job.ko}${H.copula(job.ko)}.`, ru: `Я ${shortRu(job.ru)}.` },
+    ].filter(Boolean);
+  }
   // split: для сборки фраз — каждое предложение отдельным заданием (без знаков на плашках граница между ними терялась)
   function sentenceLines(nums, split = false) {
     let lines = [
       ...DB.entriesFor(nums).filter((e) => e.kind === 'phrase').map((e) => ({ ko: e.ko, ru: e.ru })),
       ...DB.dialogues(nums).flatMap((d) => d.lines.map((l) => ({ ko: l.ko, ru: l.ru }))),
       ...DB.grammar(nums).flatMap((g) => g.examples.map((x) => ({ ko: x.ko, ru: x.ru }))),
+      ...(nums.includes(introLesson()) ? introLines() : []),
     ];
     if (split) lines = lines.flatMap(splitLine);
     return uniqBy(lines, (l) => l.ko).filter((l) => l.ko.trim().split(/\s+/).length >= 2);
@@ -222,6 +248,11 @@
   }
   // «младший брат / сестра» → «младший брат», «я (вежливо)» → «я»
   const shortRu = (s) => s.replace(/\s*\(.*?\)/g, '').split(/\s*[/,]\s*/)[0].trim();
+  // «Отец из Кореи.» — 아버지는 한국 사람이에요.
+  function natLine(p, land) {
+    const ko = `${p.ko}${H.topic(p.ko)} ${land.ko} 사람이에요.`, a = shortRu(p.ru);
+    return { ko, ru: `${a[0].toUpperCase()}${a.slice(1)} из ${land.gen}.`, toks: splitParticles(ko) };
+  }
   function pairLine(p, jb) {
     const ko = `${p.ko}${H.topic(p.ko)} ${jb.ko}${H.copula(jb.ko)}.`, a = shortRu(p.ru);
     return { ko, ru: `${a[0].toUpperCase()}${a.slice(1)}${p.t === 'pron' ? '' : ' —'} ${shortRu(jb.ru)}.`, toks: splitParticles(ko) };
@@ -248,7 +279,19 @@
   // для режима диалога: 1–2 случайных диалога целиком, по порядку реплик
   // «Прочитай и ответь»: вопросы на понимание из dialogues[].questions
   function readItems(nums) {
-    return DB.dialogues(nums).flatMap((d) => (d.questions || []).map((q) => ({ group: 'build', key: 'rd:' + q.q, types: ['read'], dlg: d, rq: q })));
+    return DB.dialogues(nums).flatMap((d) => [
+      ...(d.questions || []).map((q) => ({ group: 'build', key: 'rd:' + q.q, types: ['read'], dlg: d, rq: q })),
+      // «Верно или нет» по тексту: dialogues[].facts
+      ...(d.facts || []).map((f) => ({ group: 'build', key: 'tf:' + f.ko, types: ['tf'], dlg: d, fact: f })),
+    ]);
+  }
+  // Текст диалога для чтения. Иногда (если есть голос) только на слух: текст спрятан под «Показать текст»
+  function readPrompt(d) {
+    const text = d.lines.map((l) => l.ko).join(' ');
+    const listen = TTS.available() && Math.random() < 0.4;
+    const chat = `<div class="chat reading">${d.lines.map((l) => `<div class="msg">${l.who ? `<span class="who">${esc(l.who)}</span>` : ''}<span class="ko">${esc(l.ko)}</span></div>`).join('')}</div>`;
+    const btns = `<div class="row">${sayBtn(text)}<button type="button" class="link slow-say" data-say="${esc(text)}" data-slow="1">Медленнее</button></div>`;
+    return { listen, text, html: listen ? `${btns}<details class="show-text"><summary>Показать текст</summary>${chat}</details>` : chat + btns };
   }
   function dialogQueue(nums) {
     const ds = shuffle(DB.dialogues(nums).filter((d) => d.lines.length > 1)).slice(0, 2); // из одной реплики вопроса не выйдет
@@ -355,6 +398,15 @@
         prompt: listenBtns(e.ko, 'Варианты отличаются одним звуком'),
         options: shuffle([e.ko, ...ds.map((x) => x.ko)]).map((x) => ({ text: x, ok: x === e.ko, ko: true })),
         explain: entryExplain(e) + ds.map(diff).join('') };
+    },
+    wh(it) {
+      const e = it.entry, kind = whOf(e);
+      const ans = kind === 'nat' ? `${e.ko} 사람이에요.` : `${e.ko}${H.copula(e.ko)}.`;
+      const why = { who: 'ответ — человек', what: 'ответ — предмет', job: 'ответ — профессия', nat: 'ответ — страна' }[kind];
+      return { kind: 'choice', label: 'Какой вопрос подходит к ответу?',
+        prompt: `<div class="q-ko md">— ${esc(ans)}</div>${sayBtn(ans)}<div class="hint">${esc(kind === 'nat' ? 'из страны: ' + e.ru : shortRu(e.ru))}</div>`,
+        options: Object.values(WH).map((x) => ({ text: x, ok: x === WH[kind], ko: true })), sayAfter: WH[kind],
+        explain: `<div class="ex-line"><span class="ko">${esc(WH[kind])}</span>${sayBtn(WH[kind], 'sm')} — <span class="ko">${esc(ans)}</span></div><div class="ex-ru">${why}: 누구 — кто, 뭐 — что</div>` };
     },
     yesno(it) {
       // «Перед тобой шапка. 책이에요?» — 아니요, 모자예요.
@@ -497,12 +549,19 @@
     },
     read(it) {
       const d = it.dlg, q = it.rq, at = d.lines[q.at];
-      const text = d.lines.map((l) => l.ko).join(' ');
-      return { kind: 'choice', label: 'Прочитай и ответь',
-        prompt: `<div class="chat reading">${d.lines.map((l) => `<div class="msg">${l.who ? `<span class="who">${esc(l.who)}</span>` : ''}<span class="ko">${esc(l.ko)}</span></div>`).join('')}</div>
-          <div class="row">${sayBtn(text)}<button type="button" class="link slow-say" data-say="${esc(text)}" data-slow="1">Медленнее</button></div><div class="q-ru sm">${esc(q.q)}</div>`,
+      const r = readPrompt(d);
+      return { kind: 'choice', label: r.listen ? 'Послушай и ответь' : 'Прочитай и ответь', autoplay: r.listen ? r.text : undefined,
+        prompt: `${r.html}<div class="q-ru sm">${esc(q.q)}</div>`,
         options: shuffle([q.a, ...q.wrong]).map((x) => ({ text: x, ok: x === q.a })),
         explain: at ? `<div class="ex-line"><span class="ko">${esc(at.ko)}</span>${sayBtn(at.ko, 'sm')}</div><div class="ex-ru">${esc(at.ru)}</div>` : '' };
+    },
+    tf(it) {
+      const d = it.dlg, f = it.fact, at = d.lines[f.at];
+      const r = readPrompt(d);
+      return { kind: 'choice', label: r.listen ? 'Послушай: верно или нет?' : 'Прочитай: верно или нет?', autoplay: r.listen ? r.text : undefined,
+        prompt: `${r.html}<div class="q-ko md">${esc(f.ko)}</div>${sayBtn(f.ko)}`,
+        options: [{ text: 'Верно', ok: f.ok }, { text: 'Неверно', ok: !f.ok }],
+        explain: `<div class="ex-ru">«${esc(f.ru)}» — ${f.ok ? 'верно' : 'неверно'}</div>${at ? `<div class="ex-line"><span class="ko">${esc(at.ko)}</span>${sayBtn(at.ko, 'sm')}</div><div class="ex-ru">${esc(at.ru)}</div>` : ''}` };
     },
     'dialog-line'(it) {
       const d = it.dlg, line = d.lines[it.i];
@@ -565,12 +624,16 @@
 
   // ---------- экран тренировки ----------
   function start(root, mode, nums, filter = {}) {
-    const filtered = !!(filter.c || filter.q);
-    // выборка из словаря: оставляем только слова, подходящие под тему и поиск
-    const pool = filtered ? buildPool(mode, nums).filter((it) => it.entry && DB.matches(it.entry, filter)) : buildPool(mode, nums);
-    const again = `#/practice/${mode}?l=${nums.join(',')}${filter.c ? '&c=' + encodeURIComponent(filter.c) : ''}${filter.q ? '&q=' + encodeURIComponent(filter.q) : ''}`;
+    const filtered = !!(filter.c || filter.q || filter.intro);
+    // выборка из словаря (тема и поиск) или только свой рассказ о себе
+    const mine = new Set(introLines().flatMap(splitLine).concat(introLines()).map((l) => l.ko));
+    const pool = !filtered ? buildPool(mode, nums)
+      : filter.intro ? buildPool(mode, nums).filter((it) => it.line && mine.has(it.line.ko))
+      : buildPool(mode, nums).filter((it) => it.entry && DB.matches(it.entry, filter));
+    const again = `#/practice/${mode}?l=${nums.join(',')}${filter.c ? '&c=' + encodeURIComponent(filter.c) : ''}${filter.q ? '&q=' + encodeURIComponent(filter.q) : ''}${filter.intro ? '&s=intro' : ''}`;
     if (!pool.length) {
       const why = mode === 'mistakes' ? 'Ошибок пока нет — сначала потренируйся в других режимах.'
+        : filter.intro ? 'Сначала напиши, как тебя зовут, на странице «Расскажи о себе».'
         : mode === 'speak' && !micSupported() ? 'Этот браузер не умеет распознавать речь. Попробуй Chrome на компьютере или Android.'
         : MODES[mode].tts && !TTS.available() ? 'Для аудирования нужен корейский голос. Как его включить — в «Настройках».'
         : 'Для этого режима пока нет материала в выбранных уроках.';
@@ -951,5 +1014,5 @@
 
   const mistakes = (nums) => buildPool('mistakes', nums).map((it) => ({ ...it, s: Store.get(it.key) })).sort((a, b) => b.s.wrong - a.s.wrong);
 
-  window.Practice = { MODES, GEN, start, buildPool, mistakes, micSupported, cleanup: () => start.cleanup && start.cleanup() };
+  window.Practice = { MODES, GEN, start, buildPool, mistakes, micSupported, introLines, introLesson, cleanup: () => start.cleanup && start.cleanup() };
 })();

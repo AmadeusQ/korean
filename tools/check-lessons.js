@@ -57,6 +57,7 @@ for (const l of lessons) {
       if (!WORD_C.includes(w.c)) warn(where, `тема «${w.c}» не из списка в CLAUDE.md`);
       if (w.t && !T.includes(w.t)) err(where, `неизвестный тип t: «${w.t}»`);
       if (w.job && w.t) warn(where, 'профессия с флагом t не попадёт в упражнения на 이에요/예요');
+      if (w.c === 'Страны' && !/어$/.test(w.ko) && w.ko !== '나라' && !w.gen) warn(where, 'у страны нет gen (родительный падеж для «Я из …»)');
     } else if (!w.c) warn(where, 'у фразы нет темы c');
     const prev = seenKo.get(w.ko);
     if (prev && prev.ru !== w.ru) warn(where, `в ${prev.where} перевод «${prev.ru}», здесь «${w.ru}» (в словаре останется первый)`);
@@ -90,6 +91,11 @@ for (const l of lessons) {
         if (new Set(q.wrong).size !== q.wrong.length) err(w, 'повторы среди неверных ответов');
       }
       if (q.at != null && !d.lines[q.at]) err(w, `нет реплики с индексом at=${q.at}`);
+    });
+    (d.facts || []).forEach((f, k) => {
+      const w = `${where} facts[${k}]`;
+      if (!f.ko || !hasKo(f.ko) || !f.ru || typeof f.ok !== 'boolean') err(w, 'нужны ko, ru и ok: true/false');
+      if (f.at != null && !d.lines[f.at]) err(w, `нет реплики с индексом at=${f.at}`);
     });
   });
 }

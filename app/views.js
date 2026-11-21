@@ -190,6 +190,7 @@
       const units = l.hangul.map((u) => H.UNITS[u]);
       return `<div class="card"><h3>Что прошли</h3><ul class="topics">${l.topics.map((t) => `<li>${esc(t)}</li>`).join('')}</ul></div>
         ${l.notes?.length ? `<div class="card note"><h3>Запомнить</h3>${l.notes.map((n) => `<p>${esc(n)}</p>`).join('')}</div>` : ''}
+        ${l.number === Practice.introLesson() ? `<div class="card"><h3>Расскажи о себе</h3><p class="sm">Впиши своё имя, страну и профессию — получится твой 자기소개, его можно собирать из плашек и повторять вслух.</p><a class="link" href="#/intro">Составить рассказ о себе →</a></div>` : ''}
         ${units.length ? `<div class="card"><h3>Хангыль в этом уроке</h3><div class="chips">${units.map((u) => `<span class="chip">${u.title}</span>`).join('')}</div><a class="link" href="#/hangul">Открыть таблицу хангыля →</a></div>` : ''}
         <h2 class="h">Как тренировать</h2>${modeGrid([l.number])}
         <p class="muted xs report">Нашёл ошибку в уроке? <a class="link" href="https://github.com/AmadeusQ/korean/issues/new" target="_blank" rel="noopener">Напиши об этом</a>.</p>`;
@@ -390,7 +391,8 @@
       : it.sys ? `числа: ${esc(Numbers.SYSTEMS[it.sys].title)}, ${it.n <= 10 ? 'до 10' : it.n < 100 ? 'до 100' : 'от 100'}`
       : it.target ? `пропись <span class="ko">${esc(it.target)}</span>`
       : it.jamo ? `буква <span class="ko">${esc(it.jamo)}</span>` : it.line ? `<span class="ko">${esc(it.line.ko)}</span>`
-      : it.p ? `<span class="ko">${esc(it.p.ko)} … ${esc(it.jb.ko)}</span>` : it.dlg ? `<span class="ko">${esc(it.dlg.lines[it.i].ko)}</span>` : esc(it.key);
+      : it.p ? `<span class="ko">${esc(it.p.ko)} … ${esc(it.jb.ko)}</span>`
+      : it.fact ? `<span class="ko">${esc(it.fact.ko)}</span> — верно или нет` : it.rq ? esc(it.rq.q) : it.dlg ? `<span class="ko">${esc(it.dlg.lines[it.i].ko)}</span>` : esc(it.key);
     const q = String(nums) === String(DB.openNums()) ? '' : `?l=${nums.join(',')}`;
     return `<section class="block mistakes"><h2 class="h">Мои ошибки</h2>
       ${list.length ? `<div class="mist-list">${list.slice(0, 8).map((it) => `<div class="mist-row"><span>${label(it)}</span><span class="muted xs">ошибок: ${it.s.wrong}</span></div>`).join('')}</div>
@@ -497,10 +499,44 @@
     });
   }
 
+  // ---------- Свой 자기소개 ----------
+  function intro(root) {
+    const n = Practice.introLesson();
+    const m = Store.intro() || { name: '', country: '', job: '' };
+    const lands = DB.entries.filter((e) => e.c === 'Страны' && e.gen), jobs = DB.entries.filter((e) => e.job);
+    const opt = (list, v) => `<option value="">—</option>${list.map((e) => `<option value="${esc(e.ko)}" ${e.ko === v ? 'selected' : ''}>${esc(e.ko)} · ${esc(e.ru)}</option>`).join('')}`;
+    root.innerHTML = `<a class="back" href="#/lesson/${n}">${icon('back')} Урок ${n}</a>
+      <h1 class="page-title">Расскажи о себе <span class="muted ko">자기소개</span></h1>
+      <form class="card form intro-form">
+        <label class="field"><span>Имя хангылем</span><input class="in-name" lang="ko" maxlength="12" autocomplete="off" placeholder="например, 안나" value="${esc(m.name)}"></label>
+        <p class="muted xs">Имя пишется, как звучит: Анна → 안나, Максим → 막심, Айгерим → 아이게림.</p>
+        <label class="field"><span>Страна</span><select class="in-land">${opt(lands, m.country)}</select></label>
+        <label class="field"><span>Профессия</span><select class="in-job">${opt(jobs, m.job)}</select></label>
+      </form>
+      <div class="card intro-out"></div>`;
+    const $ = (s) => root.querySelector(s);
+    Keyboard.attach($('.intro-form'), $('.in-name'), () => {}, false);
+    const draw = () => {
+      const name = $('.in-name').value.trim();
+      // буквы без слога (ㅇ, ㅏ) — имя ещё набирается, это не ошибка
+      const bad = /[^가-힣ㄱ-ㅎㅏ-ㅣ ]/.test(name), typing = !bad && !/^[가-힣]+( [가-힣]+)*$/.test(name);
+      Store.setIntro({ name: bad || typing ? '' : name, country: $('.in-land').value, job: $('.in-job').value });
+      const lines = Practice.introLines(), q = `?l=${n}&s=intro`;
+      $('.intro-out').innerHTML = bad ? '<p class="sm">Имя нужно написать корейскими буквами (можно печатать латиницей по раскладке: dkssk → 안나).</p>'
+        : !lines.length ? '<p class="muted sm">Впиши имя — здесь появится твой рассказ.</p>'
+        : `<h3>Твой рассказ</h3>${lines.map((l) => `<div class="exm"><div><span class="ko">${esc(l.ko)}</span><div class="muted sm">${esc(l.ru)}</div></div>${sayBtn(l.ko, 'sm')}</div>`).join('')}
+          <button class="link" data-say="${esc(lines.map((l) => l.ko).join(' '))}">${icon('speaker')} Прослушать целиком</button>
+          <div class="row"><a class="btn" href="#/practice/build${q}">Собрать из плашек</a><a class="btn ghost" href="#/practice/translate${q}">Перевести с русского</a>${Practice.micSupported() ? `<a class="btn ghost" href="#/practice/shadow${q}">Повторить вслух</a>` : ''}</div>`;
+    };
+    $('.intro-form').addEventListener('input', draw); $('.intro-form').addEventListener('change', draw);
+    $('.intro-form').addEventListener('submit', (e) => e.preventDefault());
+    draw();
+  }
+
   function applyTheme() {
     const t = Store.settings().theme;
     if (t === 'auto') document.documentElement.removeAttribute('data-theme'); else document.documentElement.dataset.theme = t;
   }
 
-  window.Views = { home, lessons, lesson, dict, hangul, practiceMenu, settings, importLink, applyTheme };
+  window.Views = { home, lessons, lesson, dict, hangul, practiceMenu, settings, importLink, intro, applyTheme };
 })();

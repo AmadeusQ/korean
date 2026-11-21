@@ -9,7 +9,7 @@
     const params = new URLSearchParams(query || '');
     const parts = path.split('/').filter(Boolean);
     const tab = parts[0] || 'home';
-    document.querySelectorAll('.nav a').forEach((a) => a.classList.toggle('on', a.dataset.tab === (tab === 'lesson' ? 'lessons' : tab)));
+    document.querySelectorAll('.nav a').forEach((a) => a.classList.toggle('on', a.dataset.tab === (tab === 'lesson' || tab === 'intro' ? 'lessons' : tab)));
     window.scrollTo(0, 0);
     const nums = params.get('l') ? params.get('l').split(',').filter((x) => x !== '').map(Number).filter((n) => !isNaN(n)) : DB.openNums();
     switch (tab) {
@@ -19,8 +19,9 @@
       case 'hangul': return Views.hangul(view);
       case 'settings': return Views.settings(view);
       case 'import': return Views.importLink(view, parts[1] || '');
+      case 'intro': return Views.intro(view);
       case 'practice':
-        if (parts[1] && Practice.MODES[parts[1]]) return Practice.start(view, parts[1], nums, { c: params.get('c') || '', q: params.get('q') || '' });
+        if (parts[1] && Practice.MODES[parts[1]]) return Practice.start(view, parts[1], nums, { c: params.get('c') || '', q: params.get('q') || '', intro: params.get('s') === 'intro' });
         return Views.practiceMenu(view);
       default: return Views.home(view);
     }

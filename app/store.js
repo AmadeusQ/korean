@@ -36,7 +36,10 @@
     return (Array.isArray(list) ? list : []).map((w) => w && ({ ko: str(w.ko, 60).trim(), ru: str(w.ru, 120).trim(), c: str(w.c, 40) || 'Мои слова', added: isDay(w.added) ? w.added : '' }))
       .filter((w) => w && w.ko && w.ru && /[가-힣]/.test(w.ko)).slice(0, 2000);
   }
-  function cleanMeta(meta) { const m = meta || {}; return { matchBest: num(m.matchBest) || undefined, timedBest: int(m.timedBest, 0, 1e4) || undefined, backupAt: num(m.backupAt) || undefined, backupHide: num(m.backupHide) || undefined }; }
+  // свой 자기소개: только хангыль (имя вставляется в задания и озвучку)
+  const hangulOnly = (v, max) => { const x = str(v, max).trim(); return /^[가-힣]+( [가-힣]+)*$/.test(x) ? x : ''; };
+  const cleanIntro = (v) => (v && typeof v === 'object' ? { name: hangulOnly(v.name, 12), country: hangulOnly(v.country, 20), job: hangulOnly(v.job, 20) } : undefined);
+  function cleanMeta(meta) { const m = meta || {}; return { matchBest: num(m.matchBest) || undefined, timedBest: int(m.timedBest, 0, 1e4) || undefined, backupAt: num(m.backupAt) || undefined, backupHide: num(m.backupHide) || undefined, intro: cleanIntro(m.intro) }; }
   function cleanSettings(s) {
     const d = empty().settings, x = Object.assign({}, d, s || {});
     return { rate: Math.min(1.5, Math.max(0.5, num(x.rate) || d.rate)), dailyGoal: int(x.dailyGoal, 5, 300), romanize: !!x.romanize, typing: !!x.typing, keyboard: !!x.keyboard, theme: ['auto', 'light', 'dark'].includes(x.theme) ? x.theme : 'auto' };
@@ -125,6 +128,8 @@
     removeCustom(ko) { state.custom = (state.custom || []).filter((x) => x.ko !== ko); save(); },
     meta: (k) => state.meta?.[k],
     setMeta(k, v) { state.meta = state.meta || {}; state.meta[k] = v; save(); },
+    intro: () => state.meta?.intro || null,
+    setIntro(v) { state.meta = state.meta || {}; state.meta.intro = cleanIntro(v); save(); return state.meta.intro; },
     exportJSON: () => JSON.stringify(state, null, 1),
     importJSON(text) {
       const s = JSON.parse(text);
