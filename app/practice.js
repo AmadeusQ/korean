@@ -89,6 +89,7 @@
           if (mode === 'mix' && tts) t.push('listen-word');
         }
         if (tts && mode !== 'cards' && mode !== 'words' && e.kind === 'word' && soundAlikes(e.ko).length >= 2) t.push('listen-pair');
+        if (tts && typing && (mode === 'mix' || mode === 'listen') && e.kind === 'word' && [...e.ko].length <= 5) t.push('dictation');
         add('words', e.key, t, { entry: e });
       }
     }
@@ -128,21 +129,37 @@
       if (mode === 'mix') pool.push(...dialogLines(nums), ...readItems(nums));
     }
     if (['mix', 'translate'].includes(mode)) {
-      translateLines(nums).forEach((l) => add('build', 'tr:' + l.ko, ['translate'], { line: l, toks: l.toks }));
+      translateLines(nums).forEach((l) => add('build', 'tr:' + l.ko, trTypes(), { line: l, toks: l.toks }));
       if (DB.grammar(nums).some((g) => g.id === 'topic')) {
         const persons = entries.filter((e) => e.p), jobs = entries.filter((e) => e.job);
         for (let i = 0; i < 10 && persons.length && jobs.length; i++) {
           const l = pairLine(pick(persons), pick(jobs));
-          add('build', 'tr:' + l.ko, ['translate'], { line: l, toks: l.toks });
+          add('build', 'tr:' + l.ko, trTypes(), { line: l, toks: l.toks });
         }
         const lands = entries.filter((e) => e.c === 'Страны' && e.gen);
         for (let i = 0; i < 8 && persons.length && lands.length; i++) {
           const l = natLine(pick(persons), pick(lands));
-          add('build', 'tr:' + l.ko, ['translate'], { line: l, toks: l.toks });
+          add('build', 'tr:' + l.ko, trTypes(), { line: l, toks: l.toks });
         }
       }
     }
     return uniqBy(pool, (p) => p.key);
+  }
+
+  // «Составь предложение»: из плашек, а выученное — набрать целиком
+  // «шапка, шляпа» и «шляпа; шапка» — одни и те же значения. Пояснения в скобках важны: 형 и 오빠 различаются ими
+  const meanings = (ru) => ru.toLowerCase().split(/\s*[,;/]\s*/).map((x) => x.trim()).filter(Boolean).sort().join('|');
+  const trTypes = () => (Store.settings().typing ? ['translate', 'translate-type'] : ['translate']);
+  // Сложность типа задания: 0 — узнать среди вариантов, 1 — выбрать по-корейски или собрать, 2 — написать самому.
+  // Новое и слабое чаще спрашиваем полегче, выученное — потруднее: вспомнить сложнее, чем узнать, и запоминается прочнее.
+  const LEVEL = { 'ru-ko': 1, build: 1, translate: 1, sentence: 1, cloze: 1, type: 2, 'translate-type': 2, dictation: 2 };
+  function pickType(it) {
+    if (it.types.length === 1) return it.types[0];
+    const b = Store.box(it.key), want = b < 1 ? 0 : b < 3 ? 1 : 2;
+    const w = it.types.map((t) => [4, 1.5, 0.5][Math.abs((LEVEL[t] || 0) - want)]);
+    let r = Math.random() * w.reduce((a, x) => a + x, 0);
+    for (let i = 0; i < w.length; i++) if ((r -= w[i]) < 0) return it.types[i];
+    return it.types[it.types.length - 1];
   }
 
   // Числа помним по диапазонам, а не по каждому числу: иначе хранилище и ссылка переноса разрастаются
@@ -159,6 +176,7 @@
       case 'w': { const e = word(arg); if (!e) return null;
         const t = ['ko-ru', 'ru-ko']; if (Store.settings().typing && e.kind === 'word' && [...e.ko].length <= 5) t.push('type'); if (tts) t.push('listen-word');
         if (tts && e.kind === 'word' && soundAlikes(e.ko).length >= 2) t.push('listen-pair');
+        if (tts && Store.settings().typing && e.kind === 'word' && [...e.ko].length <= 5) t.push('dictation');
         return { group: 'words', key, types: t, entry: e }; }
       case 'j': return J.vowels.concat(J.cons).includes(arg) ? { group: 'hangul', key, types: ['jamo-read', 'syll-read', 'compose'].concat(H.NAMES[arg] && J.units.includes('names') ? ['jamo-name'] : []), jamo: arg, J } : null;
       case 'b': { const e = word(arg); return e ? { group: 'hangul', key, types: ['batchim'], entry: e } : null; }
@@ -173,14 +191,14 @@
       case 'cloze': { const l = sentenceLines(nums, true).find((x) => x.ko === arg); const c = l && clozeTarget(l); return c ? { group: 'build', key, types: ['cloze'], line: l, ...c } : null; }
       case 'tr': {
         const l = translateLines(nums).find((x) => x.ko === arg);
-        if (l) return { group: 'build', key, types: ['translate'], line: l, toks: l.toks };
+        if (l) return { group: 'build', key, types: trTypes(), line: l, toks: l.toks };
         // предложение «X은/는 Y이에요» собиралось из слов урока, а не из готовых фраз
         const m = arg.match(/^(.+?)(은|는) (.+)(이에요|예요)\.$/);
         const land = m && /^\S+ 사람$/.test(m[3]) && word(m[3].slice(0, -3));
-        if (land) { const p = word(m[1]); if (!p?.p || !land.gen) return null; const nl = natLine(p, land); return { group: 'build', key, types: ['translate'], line: nl, toks: nl.toks }; }
+        if (land) { const p = word(m[1]); if (!p?.p || !land.gen) return null; const nl = natLine(p, land); return { group: 'build', key, types: trTypes(), line: nl, toks: nl.toks }; }
         const p = m && word(m[1]), jb = m && word(m[3]);
         if (!p || !jb || !p.p || !jb.job) return null;
-        const pl = pairLine(p, jb); return { group: 'build', key, types: ['translate'], line: pl, toks: pl.toks };
+        const pl = pairLine(p, jb); return { group: 'build', key, types: trTypes(), line: pl, toks: pl.toks };
       }
       case 'rd': case 'tf': return readItems(nums).find((x) => x.key === key) || null;
       case 'dl': { for (const d of DB.dialogues(nums)) { const i = d.lines.findIndex((l, k) => k > 0 && l.ko === arg); if (i > 0) return { group: 'build', key, types: ['dialog-line'], dlg: d, i }; } return null; }
@@ -298,7 +316,8 @@
     return ds.flatMap((d) => d.lines.slice(1).map((l, k) => ({ group: 'build', key: 'dl:' + l.ko, types: ['dialog-line'], dlg: d, i: k + 1 })));
   }
 
-  function choose(pool, n, mode) {
+  // newLeft: сколько новых слов ещё можно дать сегодня; лишние новые уходят в конец и берутся, только если больше нечего
+  function choose(pool, n, mode, newLeft = Infinity) {
     const now = Date.now();
     const score = (it) => {
       const s = Store.get(it.key);
@@ -306,13 +325,22 @@
       if (s.due <= now) return 2 + (Store.MAX_BOX - s.box) * 0.3 + Math.random();
       return Math.random() * 0.8;
     };
-    const ranked = pool.map((it) => ({ it, s: score(it) })).sort((a, b) => b.s - a.s).map((x) => x.it);
-    const quotas = mode === 'mix' ? { words: 0.45, hangul: 0.25, grammar: 0.15, build: 0.15 } : null;
+    let ranked = pool.map((it) => ({ it, s: score(it) })).sort((a, b) => b.s - a.s).map((x) => x.it), late = [];
+    if (newLeft < Infinity) {
+      const isNew = (it) => it.group === 'words' && !Store.get(it.key);
+      const fresh = ranked.filter(isNew);
+      late = fresh.slice(newLeft);
+      ranked = ranked.filter((it) => !late.includes(it));
+    }
+    // хангыль: четверть тренировки, пока буквы новые, и всё меньше по мере освоения (не меньше 5%)
+    const hm = DB.mastery(ranked.filter((it) => it.group === 'hangul').map((it) => it.key));
+    const hq = Math.max(0.05, 0.25 * (1 - hm));
+    const quotas = mode === 'mix' ? { words: 0.45 + (0.25 - hq), hangul: hq, grammar: 0.15, build: 0.15 } : null;
     const out = [];
     if (quotas) {
       for (const [g, q] of Object.entries(quotas)) out.push(...ranked.filter((it) => it.group === g).slice(0, Math.round(n * q)));
     }
-    for (const it of ranked) { if (out.length >= n) break; if (!out.includes(it)) out.push(it); }
+    for (const it of [...ranked, ...late]) { if (out.length >= n) break; if (!out.includes(it)) out.push(it); }
     return shuffle(out.slice(0, n));
   }
 
@@ -427,9 +455,17 @@
         explain: `<div class="ex-line">${yes ? `Да, это ${esc(shortRu(e.ru))}` : `Это не ${esc(shortRu(asked.ru))}, а ${esc(shortRu(e.ru))}`} → <span class="ko">${esc(right)}.</span>${sayBtn(right, 'sm')}</div>
           <div class="ex-ru"><span class="ko">${esc(e.ko)}</span> кончается на ${H.hasBatchim(e.ko) ? 'согласную → 이에요' : 'гласную → 예요'}</div><div class="row"><button type="button" class="link" data-rule="yesno">Правило 네/아니요 →</button><button type="button" class="link" data-rule="copula">Правило 이에요/예요 →</button></div>` };
     },
+    // Диктант: услышать и написать
+    dictation(it) {
+      const e = it.entry;
+      const accept = DB.entries.filter((x) => x !== e && H.pron(x.ko) === H.pron(e.ko)).map((x) => x.ko);
+      return { kind: 'type', label: 'Напиши, что услышишь', autoplay: e.ko, prompt: listenBtns(e.ko, 'Нажми, чтобы послушать ещё раз'), answer: e.ko, accept, explain: entryExplain(e) };
+    },
     type(it) {
       const e = it.entry;
-      return { kind: 'type', label: 'Напиши по-корейски', prompt: `<div class="q-ru">${esc(e.ru)}</div>`, answer: e.ko, sayAfter: e.ko, explain: entryExplain(e) };
+      // по одному переводу два слова не различить: засчитываем любое с теми же значениями
+      const accept = DB.entries.filter((x) => x !== e && meanings(x.ru) === meanings(e.ru)).map((x) => x.ko);
+      return { kind: 'type', label: 'Напиши по-корейски', prompt: `<div class="q-ru">${esc(e.ru)}</div>`, answer: e.ko, accept, sayAfter: e.ko, explain: entryExplain(e) };
     },
     card(it) { const e = it.entry; return { kind: 'card', entry: e, front: Math.random() < 0.7 ? 'ko' : 'ru' }; },
     'jamo-read'(it) {
@@ -590,6 +626,11 @@
         tokens, need: toks.length, answerToks: toks, order, answer: l.ko, sayAfter: l.ko,
         explain: `<div class="ex-line"><span class="ko">${esc(l.ko)}</span>${sayBtn(l.ko, 'sm')}</div>${why}<div class="row">${rules}</div>` };
     },
+    'translate-type'(it) {
+      const l = it.line;
+      return { kind: 'type', label: 'Напиши по-корейски целым предложением', prompt: `<div class="q-ru">${esc(l.ru)}</div><div class="hint">С частицами. Пробелы и знаки препинания не важны.</div>`,
+        answer: l.ko.replace(/[.?!…]+$/, ''), sayAfter: l.ko, explain: `<div class="ex-line"><span class="ko">${esc(l.ko)}</span>${sayBtn(l.ko, 'sm')}</div><div class="ex-ru">${esc(l.ru)}</div>` };
+    },
     build(it) {
       const l = it.line; const tokens = l.ko.trim().split(/\s+/).map((t) => t.replace(/[.,!?…]/g, '')).filter(Boolean);
       let order = shuffle(tokens.map((t, i) => i));
@@ -643,7 +684,8 @@
     if (mode === 'match') return startMatch(root, nums, pool);
     const isTest = mode === 'test', isTimed = mode === 'timed';
     const TIME = 5 * 60 * 1000; const t0 = Date.now(); let timeUp = false, timer = null;
-    const queue = mode === 'dialog' ? dialogQueue(nums) : choose(pool, isTest ? TEST_LEN : isTimed ? 80 : filtered ? Math.min(pool.length, FILTER_LEN) : SESSION_LEN, isTimed ? 'mix' : mode);
+    const newLeft = isTest || filtered ? Infinity : Math.max(0, Store.settings().newPerDay - Store.newToday());
+    const queue = mode === 'dialog' ? dialogQueue(nums) : choose(pool, isTest ? TEST_LEN : isTimed ? 80 : filtered ? Math.min(pool.length, FILTER_LEN) : SESSION_LEN, isTimed ? 'mix' : mode, newLeft);
     const introduced = new Set(); let introCount = 0;
     const introOk = !['cards', 'test', 'mistakes', 'timed'].includes(mode);
     const retried = new Set(), stored = new Set();
@@ -747,7 +789,7 @@
         queue.splice(Math.min(queue.length, idx + 3), 0, it); // проверим через пару вопросов
         progress(); $foot.className = 's-foot'; return renderIntro(it);
       }
-      q = GEN[pick(it.types)](it); q.item = it; answered = false;
+      q = GEN[pickType(it)](it); q.item = it; answered = false;
       progress();
       $foot.className = 's-foot'; $foot.innerHTML = '';
       if (q.kind === 'choice') renderChoice();
@@ -786,8 +828,12 @@
       f.addEventListener('submit', (e) => {
         e.preventDefault(); if (answered) return;
         const v = inp.value.trim(); if (!v) return;
-        const ok = norm(v) === norm(q.answer);
+        // другой верный вариант: слово с тем же переводом или звучащее так же (в диктанте)
+        const alt = (q.accept || []).find((a) => norm(a) === norm(v));
+        const ok = norm(v) === norm(q.answer) || !!alt;
         inp.disabled = true; inp.classList.add(ok ? 'right' : 'wrong');
+        $body.querySelector('.type-form + .hint')?.remove();
+        if (alt) q.explain = `<div class="ex-ru">Засчитано: <span class="ko">${esc(alt)}</span> тоже подходит, здесь имелось в виду</div>` + q.explain;
         if (!ok) q.explain = diffHtml(v, q.answer) + q.explain;
         done(ok);
       });
@@ -1014,5 +1060,5 @@
 
   const mistakes = (nums) => buildPool('mistakes', nums).map((it) => ({ ...it, s: Store.get(it.key) })).sort((a, b) => b.s.wrong - a.s.wrong);
 
-  window.Practice = { MODES, GEN, start, buildPool, mistakes, micSupported, introLines, introLesson, cleanup: () => start.cleanup && start.cleanup() };
+  window.Practice = { MODES, GEN, start, buildPool, mistakes, micSupported, introLines, introLesson, choose, cleanup: () => start.cleanup && start.cleanup() };
 })();

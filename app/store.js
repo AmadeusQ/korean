@@ -5,7 +5,7 @@
   const INTERVALS = [0, 1, 2, 4, 8, 16, 32].map((d) => d * DAY); // по коробкам 0..6
   const MAX_BOX = INTERVALS.length - 1;
 
-  const empty = () => ({ items: {}, days: {}, settings: { rate: 0.85, dailyGoal: 30, romanize: true, typing: true, keyboard: true, theme: 'auto' }, tests: {}, custom: [], meta: {} });
+  const empty = () => ({ items: {}, days: {}, settings: { rate: 0.85, dailyGoal: 30, newPerDay: 15, romanize: true, typing: true, keyboard: true, theme: 'auto' }, tests: {}, custom: [], meta: {} });
   // Всё, что приходит из localStorage, ссылки переноса или файла, приводим к ожидаемым типам:
   // числа — числами, строки — строками, лишнее выбрасываем. Иначе чужая ссылка могла бы внедрить разметку.
   const int = (v, min, max) => { const n = Math.round(Number(v)); return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : min; };
@@ -24,7 +24,7 @@
   }
   function cleanDays(days) {
     const out = {};
-    for (const [d, v] of Object.entries(days || {})) if (isDay(d) && v && typeof v === 'object') out[d] = { n: int(v.n, 0, 1e5), ok: int(v.ok, 0, 1e5) };
+    for (const [d, v] of Object.entries(days || {})) if (isDay(d) && v && typeof v === 'object') out[d] = { n: int(v.n, 0, 1e5), ok: int(v.ok, 0, 1e5), nw: int(v.nw, 0, 1e5) };
     return out;
   }
   function cleanTests(tests) {
@@ -42,7 +42,7 @@
   function cleanMeta(meta) { const m = meta || {}; return { matchBest: num(m.matchBest) || undefined, timedBest: int(m.timedBest, 0, 1e4) || undefined, backupAt: num(m.backupAt) || undefined, backupHide: num(m.backupHide) || undefined, intro: cleanIntro(m.intro) }; }
   function cleanSettings(s) {
     const d = empty().settings, x = Object.assign({}, d, s || {});
-    return { rate: Math.min(1.5, Math.max(0.5, num(x.rate) || d.rate)), dailyGoal: int(x.dailyGoal, 5, 300), romanize: !!x.romanize, typing: !!x.typing, keyboard: !!x.keyboard, theme: ['auto', 'light', 'dark'].includes(x.theme) ? x.theme : 'auto' };
+    return { rate: Math.min(1.5, Math.max(0.5, num(x.rate) || d.rate)), dailyGoal: int(x.dailyGoal, 5, 300), newPerDay: int(x.newPerDay, 3, 100), romanize: !!x.romanize, typing: !!x.typing, keyboard: !!x.keyboard, theme: ['auto', 'light', 'dark'].includes(x.theme) ? x.theme : 'auto' };
   }
   const clean = (s) => ({ items: cleanItems(s.items), days: cleanDays(s.days), tests: cleanTests(s.tests), custom: cleanCustom(s.custom), meta: cleanMeta(s.meta), settings: cleanSettings(s.settings) });
 
@@ -56,14 +56,16 @@
   function box(key) { return state.items[key]?.box ?? -1; } // -1 — ещё не встречалось
   function isDue(key, now = Date.now()) { const it = state.items[key]; return !!it && it.due <= now; }
 
-  function countDay(correct) {
+  // fresh: первый ответ на новое слово (w:…) — для лимита новых слов в день
+  function countDay(correct, fresh) {
     const d = today();
-    const day = state.days[d] || { n: 0, ok: 0 };
-    day.n++; if (correct) day.ok++;
+    const day = state.days[d] || { n: 0, ok: 0, nw: 0 };
+    day.n++; if (correct) day.ok++; if (fresh) day.nw = (day.nw || 0) + 1;
     state.days[d] = day;
   }
   function answer(key, correct) {
     const now = Date.now();
+    const fresh = !state.items[key] && key.startsWith('w:');
     const it = state.items[key] || { box: 0, due: now, right: 0, wrong: 0 };
     // верный ответ раньше срока коробку не двигает: иначе пять тренировок за вечер дают интервал в неделю
     if (correct && it.due > now) { it.right++; it.last = now; state.items[key] = it; countDay(true); save(); return it; }
@@ -72,14 +74,14 @@
     it.due = now + INTERVALS[it.box];
     it.last = now;
     state.items[key] = it;
-    countDay(correct); save();
+    countDay(correct, fresh); save();
     return it;
   }
   // Ответ засчитывается в цель дня, но коробку не двигает (повтор того же задания в одной сессии)
   function tally(correct) { countDay(correct); save(); }
   // Оценка карточки как в Anki: 0 снова, 1 трудно, 2 хорошо, 3 легко
   function grade(key, g) {
-    const now = Date.now();
+    const now = Date.now(); const fresh = !state.items[key] && key.startsWith('w:');
     const it = state.items[key] || { box: 0, due: now, right: 0, wrong: 0 };
     if (g === 0) { it.wrong++; it.box = 0; it.due = now; }
     else if (it.due > now) it.right++; // раньше срока: как в answer, коробка и срок не меняются
@@ -89,7 +91,7 @@
       it.due = now + INTERVALS[it.box] * (g === 1 ? 0.5 : 1);
     }
     it.last = now; state.items[key] = it;
-    countDay(g > 0); save();
+    countDay(g > 0, fresh); save();
     return it;
   }
   // Сколько заданий станет к повторению к концу завтрашнего дня (из тех, что сейчас ещё не пора)
@@ -112,7 +114,8 @@
 
   window.Store = {
     get, box, isDue, answer, tally, grade, forecastTomorrow, streak, lastDays, MAX_BOX,
-    todayStats: () => state.days[today()] || { n: 0, ok: 0 },
+    todayStats: () => state.days[today()] || { n: 0, ok: 0, nw: 0 },
+    newToday: () => state.days[today()]?.nw || 0,
     settings: () => state.settings,
     // через cleanSettings: пустое поле цели не превратится в 0, скорость речи останется в пределах
     setSetting(k, v) { state.settings = cleanSettings({ ...state.settings, [k]: v }); save(); },

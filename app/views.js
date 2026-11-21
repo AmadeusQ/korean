@@ -35,7 +35,7 @@
           <div class="goal-bar" role="progressbar" aria-label="Цель дня" aria-valuemin="0" aria-valuemax="${goal}" aria-valuenow="${Math.min(st.n, goal)}"><i style="width:${Math.min(100, Math.round((st.n / goal) * 100))}%"></i></div>
           <div class="row">
             <a class="btn" href="#/practice/mix">Начать тренировку</a>
-            <span class="muted sm">${due ? `${plural(due, 'слово ждёт', 'слова ждут', 'слов ждут')} повторения` : 'Повторять пока нечего — можно учить новое'}${tomorrow ? ` · завтра ещё ${tomorrow}` : ''}</span>
+            <span class="muted sm">${due ? `${plural(due, 'слово ждёт', 'слова ждут', 'слов ждут')} повторения` : 'Повторять пока нечего — можно учить новое'}${tomorrow ? ` · завтра ещё ${tomorrow}` : ''}${Store.newToday() >= Store.settings().newPerDay ? ' · новые слова на сегодня все' : ''}</span>
           </div>
         </div>
         ${st.n >= goal ? UI.stamp('참 잘했어요') : ''}
@@ -48,6 +48,7 @@
         <div><b>${due}</b><span>к повторению</span></div>
         <div><b>${st.n ? Math.round((st.ok / st.n) * 100) + '%' : '—'}</b><span>точность сегодня</span></div>
       </section>
+      <a class="link more-stats" href="#/progress">Подробнее о прогрессе →</a>
 
       <div class="home-cols">
         <section class="block">
@@ -443,6 +444,7 @@
       <div class="card form">
         <h3>Тренировка</h3>
         <label class="field"><span>Цель: ответов в день</span><input type="number" min="5" max="300" step="5" value="${s.dailyGoal}" data-k="dailyGoal"></label>
+        <label class="field"><span>Новых слов в день (дальше только повторение)</span><input type="number" min="3" max="100" step="1" value="${s.newPerDay}" data-k="newPerDay"></label>
         <label class="field"><span>Задания с набором текста</span><input type="checkbox" data-k="typing" ${s.typing ? 'checked' : ''}></label>
         <label class="field"><span>Экранная корейская клавиатура (выключи, если есть своя корейская раскладка)</span><input type="checkbox" data-k="keyboard" ${s.keyboard ? 'checked' : ''}></label>
       </div>
@@ -499,6 +501,49 @@
     });
   }
 
+  // ---------- Прогресс ----------
+  // Что считается каким разделом (по началу ключа задания)
+  const PART = [['w', 'Слова и фразы'], ['j b', 'Хангыль'], ['g', 'Грамматика'], ['build cloze tr dl rd tf shadow', 'Предложения и тексты'], ['num', 'Числа'], ['write speak', 'Прописи и произношение']];
+  function progress(root) {
+    const days = Store.lastDays(30), goal = Store.settings().dailyGoal;
+    const top = Math.max(goal, ...days.map((d) => d.n), 1);
+    const sum = (f) => days.reduce((a, d) => a + f(d), 0);
+    const active = days.filter((d) => d.n).length, total = sum((d) => d.n), ok = sum((d) => d.ok);
+    const now = Date.now();
+    // по урокам: не начато, учу (уровень 0–2), знаю (3+)
+    const lessonRow = (l) => {
+      const keys = DB.lessonKeys(l.number), c = { new: 0, learn: 0, know: 0, due: 0 };
+      keys.forEach((k) => { const b = Store.box(k); c[b < 0 ? 'new' : b >= 3 ? 'know' : 'learn']++; if (Store.isDue(k, now)) c.due++; });
+      const pc = (x) => (keys.length ? (x / keys.length) * 100 : 0);
+      const t = Store.getTest(l.number);
+      return `<a class="prog-row" href="#/lesson/${l.number}"><span class="kicker serif">제${l.number}과</span>
+        <span class="prog-main"><b>${esc(l.title)}</b>
+          <span class="stack" title="знаю ${c.know}, учу ${c.learn}, не начато ${c.new}"><i class="k" style="width:${pc(c.know)}%"></i><i class="l" style="width:${pc(c.learn)}%"></i></span>
+          <span class="muted xs">знаю ${c.know} · учу ${c.learn} · не начато ${c.new}${c.due ? ` · к повторению ${c.due}` : ''}${t ? ` · контрольная ${t.best}%` : ''}</span></span></a>`;
+    };
+    // по разделам: сколько заданий пробовал, сколько выучено, точность
+    const parts = PART.map(([pre, title]) => {
+      const p = pre.split(' '), keys = Store.keys().filter((k) => p.includes(k.split(':')[0]));
+      let right = 0, wrong = 0, know = 0;
+      keys.forEach((k) => { const s = Store.get(k); right += s.right; wrong += s.wrong; if (s.box >= 3) know++; });
+      return keys.length ? `<div class="part"><b>${title}</b><span class="muted sm">заданий ${keys.length} · выучено ${know} · точность ${Math.round((right / Math.max(1, right + wrong)) * 100)}%</span></div>` : '';
+    }).join('');
+    root.innerHTML = `<h1 class="page-title">Прогресс</h1>
+      <section class="stats">
+        <div><b>${Store.streak()}</b><span>дней подряд</span></div>
+        <div><b>${active}</b><span>дней из 30</span></div>
+        <div><b>${total}</b><span>ответов за 30 дней</span></div>
+        <div><b>${total ? Math.round((ok / total) * 100) + '%' : '—'}</b><span>точность за 30 дней</span></div>
+      </section>
+      <div class="card"><h3>Ответы по дням</h3>
+        <div class="bars" role="img" aria-label="Ответы за 30 дней">${days.map((d) => `<i class="${d.n >= goal ? 'full' : ''}" style="height:${(d.n / top) * 100}%" title="${d.date}: ${d.n}, верно ${d.ok}"></i>`).join('')}
+          <span class="goal-line" style="bottom:${(goal / top) * 100}%"></span></div>
+        <div class="bars-x muted xs"><span>${days[0].date.slice(5).split('-').reverse().join('.')}</span><span>цель ${goal}</span><span>сегодня</span></div></div>
+      <div class="card"><h3>Уроки</h3><div class="prog-legend muted xs"><i class="k"></i> знаю <i class="l"></i> учу <i></i> не начато</div>${DB.lessons.map(lessonRow).join('')}</div>
+      ${parts ? `<div class="card"><h3>По разделам</h3>${parts}</div>` : ''}
+      ${mistakesBlock(DB.openNums())}`;
+  }
+
   // ---------- Свой 자기소개 ----------
   function intro(root) {
     const n = Practice.introLesson();
@@ -538,5 +583,5 @@
     if (t === 'auto') document.documentElement.removeAttribute('data-theme'); else document.documentElement.dataset.theme = t;
   }
 
-  window.Views = { home, lessons, lesson, dict, hangul, practiceMenu, settings, importLink, intro, applyTheme };
+  window.Views = { home, lessons, lesson, dict, hangul, practiceMenu, settings, importLink, intro, progress, applyTheme };
 })();
