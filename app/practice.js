@@ -30,7 +30,7 @@
   // Какой вопрос подходит к ответу: о человеке, предмете, профессии, стране
   const WH = { who: '누구예요?', what: '뭐예요?', job: '직업이 뭐예요?', nat: '어느 나라 사람이에요?' };
   const whOf = (e) => (e.c === 'Страны' && e.gen ? 'nat' : e.job ? 'job' : !showable(e) ? null : e.p ? 'who' : e.c === 'Люди' ? null : 'what');
-  const SESSION_LEN = 15, TEST_LEN = 20, FILTER_LEN = 30; // выборка из словаря: до 30 слов за раз
+  const TEST_LEN = 20, FILTER_LEN = 30; // выборка из словаря: до 30 слов за раз
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   const micSupported = () => !!SR;
 
@@ -368,7 +368,8 @@
     return out;
   }
   const numExplain = (it) => { const S = Numbers.SYSTEMS[it.sys]; const r = S.read(it.n); return `<div class="ex-line"><b>${it.n}</b> = <span class="ko">${r}</span>${sayBtn(r, 'sm')}</div><div class="ex-ru">${S.title}: ${S.use}</div><div class="ex-rule"><button type="button" class="link" data-rule="numbers">Как устроены числа →</button></div>`; };
-  const ruleBtn = (id) => `<button type="button" class="link" data-rule="${id}">Правило →</button>`;
+  const RULE_NAME = { topic: '은/는', copula: '이에요/예요', yesno: '네/아니요' };
+  const ruleBtn = (id) => `<button type="button" class="link" data-rule="${id}">Правило${RULE_NAME[id] ? ' ' + RULE_NAME[id] : ''} →</button>`;
   const entryExplain = (e) => `<div class="ex-line"><span class="ko">${esc(e.ko)}</span>${UI.rr(e.ko)}${sayBtn(e.ko, 'sm')}</div><div class="ex-ru">${esc(e.ru)}</div>`;
   // Знаки препинания в вариантах и плашках подсказывали ответ (вопрос — тот, что с «?», плашка с точкой — последняя)
   const bare = (s) => s.replace(/[.,!?…]/g, '').replace(/\s+/g, ' ').trim();
@@ -666,13 +667,13 @@
   }
 
   // Слоги ответа по позициям: где ошибся — красным, чего не хватает — пустой клеткой
-  function diffHtml(typed, answer) {
+  function diffHtml(typed, answer, mineLabel = 'ты написал') {
     const a = [...norm(typed)], b = [...norm(answer)];
     const n = Math.max(a.length, b.length);
     const mine = Array.from({ length: n }, (_, i) => a[i] === undefined ? '<span class="cell miss">·</span>'
       : `<span class="cell ${a[i] === b[i] ? '' : 'bad'}">${esc(a[i])}</span>`).join('');
     const right = b.map((c, i) => `<span class="cell ${a[i] === c ? '' : 'bad'}">${esc(c)}</span>`).join('');
-    return `<div class="diff"><div class="diff-row"><span>ты написал</span><span class="cells">${mine}</span></div><div class="diff-row"><span>правильно</span><span class="cells">${right}</span></div></div>`;
+    return `<div class="diff"><div class="diff-row"><span>${mineLabel}</span><span class="cells">${mine}</span></div><div class="diff-row"><span>правильно</span><span class="cells">${right}</span></div></div>`;
   }
 
   // ---------- экран тренировки ----------
@@ -697,7 +698,7 @@
     const isTest = mode === 'test', isTimed = mode === 'timed';
     const TIME = 5 * 60 * 1000; const t0 = Date.now(); let timeUp = false, timer = null;
     const newLeft = isTest || filtered ? Infinity : Math.max(0, Store.settings().newPerDay - Store.newToday());
-    const queue = mode === 'dialog' ? dialogQueue(nums) : choose(pool, isTest ? TEST_LEN : isTimed ? 80 : filtered ? Math.min(pool.length, FILTER_LEN) : SESSION_LEN, isTimed ? 'mix' : mode, newLeft);
+    const queue = mode === 'dialog' ? dialogQueue(nums) : choose(pool, isTest ? TEST_LEN : isTimed ? 80 : filtered ? Math.min(pool.length, FILTER_LEN) : Store.settings().sessionLen, isTimed ? 'mix' : mode, newLeft);
     const introduced = new Set(); let introCount = 0;
     const introOk = !['cards', 'test', 'mistakes', 'timed'].includes(mode);
     const retried = new Set(), stored = new Set();
@@ -903,8 +904,11 @@
           const target = norm(q.answer);
           const ok = alts.some((a) => norm(a) === target || norm(a).includes(target) || (q.fuzzy && similar(norm(a), target) >= 0.75));
           tries++;
-          heard.innerHTML = `Услышал: <span class="ko">${esc(alts[0] || '—')}</span>`;
-          if (ok) { done(true); } else if (tries >= 3) { done(false); } else { heard.innerHTML += ` · попробуй ещё раз (${3 - tries})`; }
+          // из вариантов распознавания берём самый близкий к ответу и показываем, какие слоги не совпали
+          const best = alts.slice().sort((a, b) => similar(norm(b), target) - similar(norm(a), target))[0] || '';
+          const diff = !ok && best && [...target].length <= 14 ? diffHtml(best, q.answer, 'услышал') : '';
+          heard.innerHTML = `Услышал: <span class="ko">${esc(best || '—')}</span>${diff}`;
+          if (ok) { done(true); } else if (tries >= 3) { q.explain = diff + (q.explain || ''); done(false); } else { heard.innerHTML += `<div>Попробуй ещё раз (${3 - tries})</div>`; }
         };
         rec.onerror = (ev) => { heard.textContent = ev.error === 'not-allowed' ? 'Нет доступа к микрофону — разреши его в браузере' : ev.error === 'no-speech' ? 'Ничего не услышал, попробуй ещё' : 'Ошибка распознавания: ' + ev.error; };
         rec.onend = () => { mic.classList.remove('on'); rec = null; };
@@ -954,13 +958,26 @@
       });
     }
 
+    let lastRec = null; // что сделал последний ответ: для отмены «Я промахнулся»
     function record(ok, g) {
       // верный ответ на тот же диапазон чисел в одной сессии не двигает коробку второй раз
       if (g !== undefined) Store.grade(q.item.key, g); else if (ok && q.item.uid && stored.has(q.item.key)) Store.tally(true); else Store.answer(q.item.key, ok);
+      lastRec = { hadStored: stored.has(q.item.key), requeued: false };
       stored.add(q.item.key);
       marks[idx] = ok;
       results.push({ q, ok });
-      if (!ok && !isTest && mode !== 'dialog' && !retried.has(qid(q.item))) { retried.add(qid(q.item)); queue.push(q.item); }
+      if (!ok && !isTest && mode !== 'dialog' && !retried.has(qid(q.item))) { retried.add(qid(q.item)); queue.push(q.item); lastRec.requeued = true; }
+    }
+    // Промахнулся по соседнему варианту: ответ не считается, вопрос открывается снова (один раз на вопрос)
+    function undoMiss(tok) {
+      if (tok !== idx || !lastRec || !Store.undoLast()) return;
+      results.pop(); marks[idx] = undefined;
+      if (lastRec.requeued) { queue.pop(); retried.delete(qid(q.item)); }
+      if (!lastRec.hadStored) stored.delete(q.item.key);
+      lastRec = null; q.undone = true; answered = false;
+      window.speechSynthesis?.cancel();
+      $foot.className = 's-foot'; $foot.innerHTML = '';
+      renderChoice(); progress();
     }
 
     function done(ok) {
@@ -969,9 +986,11 @@
       if (q.sayAfter) TTS.speak(q.sayAfter);
       $foot.className = 's-foot show ' + (ok ? 'ok' : 'bad');
       $foot.innerHTML = `<div class="fb"><div class="fb-title">${ok ? pick(['맞아요', '좋아요', '잘했어요']) + ' <small>верно</small>' : '틀렸어요 <small>правильный ответ</small>'}</div>
-        <div class="fb-ex">${q.explain || ''}</div></div><button class="btn wide next">Дальше</button>`;
+        <div class="fb-ex">${q.explain || ''}</div></div><button class="btn wide next">Дальше</button>
+        ${!ok && q.kind === 'choice' && !q.undone && !isTimed ? '<button type="button" class="link undo-miss">Я промахнулся, ответить ещё раз</button>' : ''}`;
       const nb = $foot.querySelector('.next');
       const tok = idx; const go = () => step(undefined, tok);
+      $foot.querySelector('.undo-miss')?.addEventListener('click', () => undoMiss(tok));
       nb.addEventListener('click', go); nb.focus({ preventScroll: true });
     }
 
