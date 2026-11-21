@@ -274,8 +274,8 @@
     const close = () => { box.remove(); document.removeEventListener('keydown', key); };
     const key = (ev) => { if (!box.isConnected) return close(); if (ev.key === 'Escape') close(); };
     box.querySelector('.note-in').addEventListener('input', (ev) => Store.setNote(e.ko, ev.target.value));
-    box.querySelector('.del-word')?.addEventListener('click', () => {
-      if (!confirm(`Удалить «${e.ko}» из своих слов?`)) return;
+    box.querySelector('.del-word')?.addEventListener('click', async () => {
+      if (!(await UI.ask(`Удалить «${e.ko}» из своих слов?`, 'Удалить', true))) return;
       DB.removeCustom(e.ko); close(); UI.toast('Удалено'); if (location.hash.startsWith('#/dict')) dict(document.getElementById('view'));
     });
     box.addEventListener('click', (ev) => { if (ev.target === box || ev.target.closest('.sheet-x') || ev.target.closest('a')) close(); });
@@ -345,7 +345,7 @@
   document.addEventListener('click', (ev) => {
     const b = ev.target.closest('[data-report]'); if (!b) return;
     const l = DB.lesson(b.dataset.report);
-    report(l ? `Урок ${l.number}: ${l.title}` : `Страница ${location.hash || '#/'}`);
+    report(l ? `Урок ${l.number}: ${l.title}` : 'Из настроек, без привязки к уроку');
   });
 
   // ---------- Словарь ----------
@@ -538,7 +538,7 @@
         <div class="row"><button class="btn sm mk-link">Создать ссылку</button></div>
         <textarea class="xfer" readonly hidden></textarea>
       </div>
-      <div class="card"><h3>Нашёл ошибку?</h3><p class="sm">Неверный перевод, опечатка или задание работает не так — <a class="link" href="https://github.com/AmadeusQ/korean/issues/new" target="_blank" rel="noopener">напиши об этом</a>. Укажи урок и слово или фразу.</p></div>
+      <div class="card"><h3>Нашёл ошибку?</h3><p class="sm">Неверный перевод, опечатка или задание работает не так — <button type="button" class="link" data-report="settings">напиши об этом</button>. Укажи урок и слово или фразу.</p></div>
       <div class="card"><h3>Как поставить на телефон</h3><p class="sm">Открой сайт на телефоне. В Chrome: меню ⋮ → «Добавить на главный экран». В Safari: «Поделиться» → «На экран „Домой“». Приложение откроется без браузерной рамки и будет работать без интернета.</p></div>`;
     root.querySelector('[data-k="theme"]').value = s.theme;
     root.querySelectorAll('[data-k]').forEach((el) => el.addEventListener('change', () => {
@@ -562,7 +562,7 @@
       if (navigator.share && matchMedia('(pointer: coarse)').matches) { navigator.share({ title: 'Мой корейский: прогресс', url }).catch(() => {}); return; }
       try { await navigator.clipboard.writeText(url); UI.toast('Ссылка скопирована'); } catch { UI.toast('Скопируй ссылку из поля'); }
     });
-    root.querySelector('.rst').addEventListener('click', () => { if (confirm('Удалить весь прогресс и свои слова на этом устройстве?')) { Store.reset(); location.hash = '#/'; location.reload(); } });
+    root.querySelector('.rst').addEventListener('click', async () => { if (await UI.ask('Удалить весь прогресс и свои слова на этом устройстве? Это не отменить.', 'Удалить всё', true)) { Store.reset(); location.hash = '#/'; location.reload(); } });
   }
 
   async function importLink(root, data) {

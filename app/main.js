@@ -37,6 +37,36 @@
     if (window.speechSynthesis) speechSynthesis.addEventListener?.('voiceschanged', () => { if (!document.body.classList.contains('in-session')) route(); }, { once: true });
     if (Store.keys().length && !/firefox/i.test(navigator.userAgent)) navigator.storage?.persist?.().catch(() => {});
     if ('serviceWorker' in navigator && location.protocol.startsWith('http')) navigator.serviceWorker.register('sw.js').catch(() => {});
+    watchUpdates();
+  }
+
+  // Новая версия сайта. GitHub Pages ставит всем файлам время выкладки (Last-Modified), по нему и сверяемся.
+  // Установленное на телефон приложение часто не перезапускается неделями — проверяем при каждом возвращении в него.
+  function watchUpdates() {
+    if (!location.protocol.startsWith('http')) return;
+    let ver = null, at = 0, pending = false;
+    const stamp = async () => {
+      try { const r = await fetch('index.html', { method: 'HEAD', cache: 'no-store' }); return r.ok ? r.headers.get('last-modified') || r.headers.get('etag') : null; } catch { return null; }
+    };
+    const show = () => {
+      // посреди тренировки не отвлекаем: плашка появится после неё
+      if (document.body.classList.contains('in-session')) { pending = true; return; }
+      pending = false;
+      if (document.querySelector('.update-bar')) return;
+      const bar = document.createElement('div'); bar.className = 'update-bar'; bar.setAttribute('role', 'status');
+      bar.innerHTML = '<span>Вышла новая версия</span><button type="button" class="btn sm">Обновить</button><button type="button" class="icon-btn" aria-label="Позже">' + UI.icon('close') + '</button>';
+      bar.querySelector('.btn').addEventListener('click', () => location.reload());
+      bar.querySelector('.icon-btn').addEventListener('click', () => bar.remove());
+      document.body.appendChild(bar);
+    };
+    const check = async () => {
+      at = Date.now();
+      const v = await stamp(); if (!v) return;
+      if (ver === null) ver = v; else if (v !== ver) show();
+    };
+    check();
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && Date.now() - at > 3 * 60000) check(); });
+    window.addEventListener('hashchange', () => { if (pending) setTimeout(show, 300); });
   }
   boot();
 })();

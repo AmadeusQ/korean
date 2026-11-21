@@ -1,7 +1,8 @@
 // Офлайн-режим. Свои файлы: сначала сеть (новые уроки появляются сразу), но не дольше 4 секунд —
-// на слабой связи отдаём из кэша. Шрифты Google: из кэша, они не меняются.
-const CACHE = 'korean-v11';
+// на слабой связи отдаём из кэша. Шрифты лежат в самом сайте (fonts/), редкие слоги кэшируются при первой встрече.
+const CACHE = 'korean-v12';
 const SHELL = ['./', './index.html', './app/styles.css', './data/index.js', './data/pictures.js', './manifest.webmanifest', './icon.svg', './icon-192.png', './icon-180.png', './icon-512.png', './icon-maskable-512.png',
+  './fonts/fonts.css', './fonts/ibm-plex-sans.woff2', './fonts/noto-sans-kr-core.woff2', './fonts/noto-serif-kr-core.woff2',
   ...['hangul', 'store', 'tts', 'ui', 'keyboard', 'numbers', 'data', 'practice', 'views', 'main'].map((f) => `./app/${f}.js`)];
 // уроки перечислены в data/index.js: берём их id оттуда, чтобы приложение открывалось без сети уже после первого визита
 async function precache() {
@@ -25,15 +26,7 @@ self.addEventListener('fetch', (e) => {
   const req = e.request;
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
-  if (url.origin !== location.origin) {
-    if (!/(^|\.)fonts\.(googleapis|gstatic)\.com$/.test(url.hostname)) return;
-    e.respondWith(caches.match(req).then((hit) => hit || fetch(req).then((res) => {
-      // только CORS-ответы: «непрозрачные» Chrome считает за ~7 МБ квоты каждый
-      if (res.ok && res.type === 'cors') { const copy = res.clone(); caches.open(CACHE).then((c) => c.put(req, copy)); }
-      return res;
-    })));
-    return;
-  }
+  if (url.origin !== location.origin) return;
   e.respondWith(networkFirst(req));
 });
 

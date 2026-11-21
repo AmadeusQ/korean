@@ -735,9 +735,9 @@
         <footer class="s-foot"></footer>
       </section>`;
     const $body = root.querySelector('.s-body'), $foot = root.querySelector('.s-foot');
-    const quit = () => {
-      if (results.length && idx < queue.length && !confirm('Выйти из тренировки? Уже данные ответы сохранены.')) return;
-      location.hash = '#/practice';
+    const quit = async () => {
+      if (results.length && idx < queue.length && !(await UI.ask('Выйти из тренировки? Уже данные ответы сохранены.', 'Выйти'))) return;
+      if (alive) location.hash = '#/practice';
     };
     root.querySelector('.quit').addEventListener('click', quit);
 
@@ -1066,7 +1066,7 @@
       <header class="s-top"><button class="icon-btn quit" type="button" aria-label="Выйти">${icon('close')}</button><div class="segs"></div><span class="s-count">0:00</span></header>
       <div class="q-label">Соедини слово с переводом</div><div class="pairs"></div></section>`;
     const $pairs = root.querySelector('.pairs');
-    root.querySelector('.quit').addEventListener('click', () => { if (round === 0 || confirm('Выйти из игры?')) location.hash = '#/practice'; });
+    root.querySelector('.quit').addEventListener('click', async () => { if ((round === 0 || (await UI.ask('Выйти из игры?', 'Выйти'))) && alive) location.hash = '#/practice'; });
     const fmt = (ms) => `${Math.floor(ms / 60000)}:${String(Math.floor(ms / 1000) % 60).padStart(2, '0')}`;
     timer = setInterval(() => { root.querySelector('.s-count').textContent = fmt(Date.now() - t0); }, 500);
     const rounds = Math.min(ROUNDS, Math.floor(items.length / PAIRS));

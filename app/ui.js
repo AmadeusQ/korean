@@ -74,5 +74,22 @@
   // Печать 도장
   const stamp = (text) => `<div class="stamp" aria-label="${esc(text)}"><span>${esc(text)}</span></div>`;
 
-  window.UI = { esc, shuffle, pick, uniqBy, icon, sayBtn, pr, rr, toast, say, strength, cells, stamp, pic, note };
+  // Подтверждение в стиле приложения вместо системного confirm(): UI.ask('Удалить?', 'Удалить', true).then((yes) => …)
+  function ask(text, okLabel = 'Да', danger = false) {
+    return new Promise((resolve) => {
+      document.querySelectorAll('.sheet-wrap.ask').forEach((x) => x.remove());
+      const box = document.createElement('div'); box.className = 'sheet-wrap ask';
+      box.innerHTML = `<div class="sheet ask-sheet" role="alertdialog" aria-modal="true"><p>${esc(text)}</p>
+        <div class="row"><button type="button" class="btn ${danger ? 'danger' : ''} yes">${esc(okLabel)}</button><button type="button" class="btn ghost no">Отмена</button></div></div>`;
+      const done = (v) => { box.remove(); document.removeEventListener('keydown', key, true); resolve(v); };
+      // клавиши не доходят до тренировки под окном; Enter нажимает кнопку в фокусе, Escape — отмена
+      const key = (e) => { if (!box.isConnected) return done(false); e.stopPropagation(); if (e.key === 'Escape') { e.preventDefault(); done(false); } };
+      box.addEventListener('click', (e) => { if (e.target.closest('.yes')) done(true); else if (e.target === box || e.target.closest('.no')) done(false); });
+      document.addEventListener('keydown', key, true);
+      document.body.appendChild(box);
+      box.querySelector(danger ? '.no' : '.yes').focus({ preventScroll: true });
+    });
+  }
+
+  window.UI = { ask, esc, shuffle, pick, uniqBy, icon, sayBtn, pr, rr, toast, say, strength, cells, stamp, pic, note };
 })();
