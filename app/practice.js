@@ -256,6 +256,9 @@
   const numExplain = (it) => { const S = Numbers.SYSTEMS[it.sys]; const r = S.read(it.n); return `<div class="ex-line"><b>${it.n}</b> = <span class="ko">${r}</span>${sayBtn(r, 'sm')}</div><div class="ex-ru">${S.title}: ${S.use}</div><div class="ex-rule"><button type="button" class="link" data-rule="numbers">Как устроены числа →</button></div>`; };
   const ruleBtn = (id) => `<button type="button" class="link" data-rule="${id}">Правило →</button>`;
   const entryExplain = (e) => `<div class="ex-line"><span class="ko">${esc(e.ko)}</span>${UI.rr(e.ko)}${sayBtn(e.ko, 'sm')}</div><div class="ex-ru">${esc(e.ru)}</div>`;
+  // Знаки препинания в вариантах и плашках подсказывали ответ (вопрос — тот, что с «?», плашка с точкой — последняя)
+  const bare = (s) => s.replace(/[.,!?…]/g, '').replace(/\s+/g, ' ').trim();
+  const tail = (s) => s.replace(/[.?!…]+$/, '');
   const sameKind = (e) => DB.entries.filter((x) => x.kind === e.kind);
   const lenNear = (e) => sameKind(e).filter((x) => Math.abs([...x.ko].length - [...e.ko].length) <= 1);
 
@@ -277,22 +280,22 @@
   const GEN = {
     'ko-ru'(it) {
       const e = it.entry;
-      const ds = fillDistractors(e, sameKind(e).filter((x) => x.c === e.c), sameKind(e), 3, (x) => x.ru);
+      const ds = fillDistractors(e, sameKind(e).filter((x) => x.c === e.c), sameKind(e), 3, (x) => tail(x.ru));
       return { kind: 'choice', label: 'Что это значит?', prompt: `${UI.cells(e.ko, 'big')}${sayBtn(e.ko)}`,
-        options: shuffle([e, ...ds]).map((x) => ({ text: x.ru, ok: x === e })), say: e.ko, explain: entryExplain(e) };
+        options: shuffle([e, ...ds]).map((x) => ({ text: tail(x.ru), ok: x === e })), say: e.ko, explain: entryExplain(e) };
     },
     'ru-ko'(it) {
       const e = it.entry;
-      const ds = fillDistractors(e, lenNear(e).filter((x) => x.c === e.c), lenNear(e), 3, (x) => x.ko);
+      const ds = fillDistractors(e, lenNear(e).filter((x) => x.c === e.c), lenNear(e), 3, (x) => bare(x.ko));
       return { kind: 'choice', label: 'Как сказать по-корейски?', prompt: `<div class="q-ru">${esc(e.ru)}</div>`,
-        options: shuffle([e, ...ds]).map((x) => ({ text: x.ko, ok: x === e, ko: true })), sayAfter: e.ko, explain: entryExplain(e) };
+        options: shuffle([e, ...ds]).map((x) => ({ text: bare(x.ko), ok: x === e, ko: true })), sayAfter: e.ko, explain: entryExplain(e) };
     },
     'listen-word'(it) {
       const e = it.entry;
-      const ds = fillDistractors(e, lenNear(e), sameKind(e), 3, (x) => x.ko);
+      const ds = fillDistractors(e, lenNear(e), sameKind(e), 3, (x) => bare(x.ko));
       return { kind: 'choice', label: 'Что прозвучало?', autoplay: e.ko,
         prompt: `<button class="big-say" data-say="${esc(e.ko)}">${icon('speaker')}</button><div class="hint">Нажми, чтобы послушать ещё раз</div>`,
-        options: shuffle([e, ...ds]).map((x) => ({ text: x.ko, ok: x === e, ko: true })), explain: entryExplain(e) };
+        options: shuffle([e, ...ds]).map((x) => ({ text: bare(x.ko), ok: x === e, ko: true })), explain: entryExplain(e) };
     },
     type(it) {
       const e = it.entry;
@@ -371,8 +374,10 @@
     },
     cloze(it) {
       const l = it.line, e = it.entry; const tokens = l.ko.split(/\s+/);
-      const shown = tokens.map((t, i) => i === it.ti ? `<span class="slot">${'＿'.repeat(Math.max(2, [...e.ko].length))}</span>${esc(t.slice(e.ko.length))}` : esc(t)).join(' ');
-      const ds = fillDistractors(e, sameKind(e).filter((x) => x.c === e.c), lenNear(e), 3, (x) => x.ko);
+      const shown = tokens.map((t, i) => i === it.ti ? `<span class="slot">＿＿＿</span>${esc(t.slice(e.ko.length))}` : esc(t)).join(' ');
+      const rest = tokens[it.ti].replace(/[.,!?]/g, '').slice(e.ko.length);
+      const fits = (x) => !rest || H.hasBatchim(x.ko) === H.hasBatchim(e.ko); // по видимой частице не отсеять варианты
+      const ds = fillDistractors(e, sameKind(e).filter((x) => x.c === e.c && fits(x)), lenNear(e).filter(fits), 3, (x) => x.ko);
       return { kind: 'choice', label: 'Вставь пропущенное слово', prompt: `<div class="q-ko md">${shown}</div><div class="hint">${esc(l.ru)}</div>`,
         options: shuffle([e, ...ds]).map((x) => ({ text: x.ko, ok: x === e, ko: true })), sayAfter: l.ko,
         explain: `<div class="ex-line"><span class="ko">${esc(l.ko)}</span>${sayBtn(l.ko, 'sm')}</div><div class="ex-ru"><span class="ko">${esc(e.ko)}</span> — ${esc(e.ru)}</div>` };
@@ -415,15 +420,15 @@
     'dialog-line'(it) {
       const d = it.dlg, line = d.lines[it.i];
       const prev = d.lines.slice(Math.max(0, it.i - 3), it.i);
-      const pool = uniqBy([...DB.dialogues(DB.allNums()).flatMap((x) => x.lines), ...DB.entries.filter((e) => e.kind === 'phrase')], (x) => x.ko)
-        .filter((x) => x.ko !== line.ko);
+      const pool = uniqBy([...DB.dialogues(DB.allNums()).flatMap((x) => x.lines), ...DB.entries.filter((e) => e.kind === 'phrase')], (x) => bare(x.ko))
+        .filter((x) => bare(x.ko) !== bare(line.ko));
       const near = pool.filter((x) => Math.abs(x.ko.length - line.ko.length) <= 8);
       const ds = shuffle(near.length >= 3 ? near : pool).slice(0, 3);
       return { kind: 'choice', label: `${d.title}`, autoplay: prev[prev.length - 1]?.ko,
         prompt: `<div class="chat">${prev.map((l) => `<div class="msg"><span class="who">${esc(l.who || '')}</span><span class="ko">${esc(l.ko)}</span></div>`).join('')}
           <div class="msg me"><span class="who">${esc(line.who || '')}</span><span class="dots-typing">…</span></div></div>
           <div class="hint">Что ответит ${esc(line.who || 'собеседник')}? По смыслу: «${esc(line.ru)}»</div>`,
-        options: shuffle([line, ...ds]).map((x) => ({ text: x.ko, ok: x === line, ko: true })), sayAfter: line.ko,
+        options: shuffle([line, ...ds]).map((x) => ({ text: bare(x.ko), ok: x === line, ko: true })), sayAfter: line.ko,
         explain: `<div class="ex-line"><span class="ko">${esc(line.ko)}</span>${sayBtn(line.ko, 'sm')}</div><div class="ex-ru">${esc(line.ru)}</div>` };
     },
     translate(it) {
@@ -438,7 +443,7 @@
         explain: `<div class="ex-line"><span class="ko">${esc(l.ko)}</span>${sayBtn(l.ko, 'sm')}</div>${why}<div class="row">${rules}</div>` };
     },
     build(it) {
-      const l = it.line; const tokens = l.ko.trim().split(/\s+/);
+      const l = it.line; const tokens = l.ko.trim().split(/\s+/).map((t) => t.replace(/[.,!?…]/g, '')).filter(Boolean);
       let order = shuffle(tokens.map((t, i) => i));
       if (tokens.length > 1 && order.every((x, i) => x === i)) order = order.reverse();
       return { kind: 'build', label: 'Собери фразу', prompt: `<div class="q-ru">${esc(l.ru)}</div>`, tokens, order, answer: l.ko, sayAfter: l.ko,
