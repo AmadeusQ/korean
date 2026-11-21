@@ -101,7 +101,7 @@
       }
     }
     if (['mix', 'build'].includes(mode)) {
-      const lines = sentenceLines(nums);
+      const lines = sentenceLines(nums, true);
       lines.forEach((l) => add('build', 'build:' + l.ko, ['build'], { line: l }));
       lines.forEach((l) => { const c = clozeTarget(l); if (c) add('build', 'cloze:' + l.ko, ['cloze'], { line: l, ...c }); });
       if (mode === 'mix') pool.push(...dialogLines(nums));
@@ -141,8 +141,8 @@
         if (gid === 'sent') { const [pk, jk] = val.split('|'); const p = word(pk), jb = word(jk); return p?.p && jb?.job ? { group: 'grammar', key, types: ['sentence'], p, jb } : null; }
         return null;
       }
-      case 'build': { const l = sentenceLines(nums).find((x) => x.ko === arg); return l ? { group: 'build', key, types: ['build'], line: l } : null; }
-      case 'cloze': { const l = sentenceLines(nums).find((x) => x.ko === arg); const c = l && clozeTarget(l); return c ? { group: 'build', key, types: ['cloze'], line: l, ...c } : null; }
+      case 'build': { const l = sentenceLines(nums, true).find((x) => x.ko === arg); return l ? { group: 'build', key, types: ['build'], line: l } : null; }
+      case 'cloze': { const l = sentenceLines(nums, true).find((x) => x.ko === arg); const c = l && clozeTarget(l); return c ? { group: 'build', key, types: ['cloze'], line: l, ...c } : null; }
       case 'tr': {
         const l = translateLines(nums).find((x) => x.ko === arg);
         if (l) return { group: 'build', key, types: ['translate'], line: l, toks: l.toks };
@@ -169,12 +169,20 @@
   }
 
   // фразы из уроков, диалогов и примеров грамматики (от двух слов)
-  function sentenceLines(nums) {
-    const lines = [
+  // «안녕하세요? 저는 안나예요.» → два предложения, если русский перевод делится так же
+  const sentences = (s) => (s.match(/[^.?!]+[.?!]*/g) || []).map((x) => x.trim()).filter(Boolean);
+  function splitLine(l) {
+    const k = sentences(l.ko), r = sentences(l.ru);
+    return k.length > 1 && k.length === r.length ? k.map((ko, i) => ({ ko, ru: r[i] })) : [l];
+  }
+  // split: для сборки фраз — каждое предложение отдельным заданием (без знаков на плашках граница между ними терялась)
+  function sentenceLines(nums, split = false) {
+    let lines = [
       ...DB.entriesFor(nums).filter((e) => e.kind === 'phrase').map((e) => ({ ko: e.ko, ru: e.ru })),
       ...DB.dialogues(nums).flatMap((d) => d.lines.map((l) => ({ ko: l.ko, ru: l.ru }))),
       ...DB.grammar(nums).flatMap((g) => g.examples.map((x) => ({ ko: x.ko, ru: x.ru }))),
     ];
+    if (split) lines = lines.flatMap(splitLine);
     return uniqBy(lines, (l) => l.ko).filter((l) => l.ko.trim().split(/\s+/).length >= 2);
   }
   // «Составь предложение»: частицы 은/는 и связка 이에요/예요 отдельными плашками, к ним пара-обманка
@@ -192,7 +200,7 @@
   }
   function translateLines(nums) {
     if (!DB.grammar(nums).some((g) => g.id === 'copula' || g.id === 'topic')) return [];
-    return sentenceLines(nums).map((l) => ({ ...l, toks: splitParticles(l.ko) })).filter((l) => l.toks && l.toks.length <= 8);
+    return sentenceLines(nums, true).map((l) => ({ ...l, toks: splitParticles(l.ko) })).filter((l) => l.toks && l.toks.length <= 8);
   }
   // «младший брат / сестра» → «младший брат», «я (вежливо)» → «я»
   const shortRu = (s) => s.replace(/\s*\(.*?\)/g, '').split(/\s*[/,]\s*/)[0].trim();
