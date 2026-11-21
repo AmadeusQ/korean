@@ -253,7 +253,7 @@
     }
     return out;
   }
-  const numExplain = (it) => { const S = Numbers.SYSTEMS[it.sys]; const r = S.read(it.n); return `<div class="ex-line"><b>${it.n}</b> = <span class="ko">${r}</span>${sayBtn(r, 'sm')}</div><div class="ex-ru">${S.title}: ${S.use}</div>`; };
+  const numExplain = (it) => { const S = Numbers.SYSTEMS[it.sys]; const r = S.read(it.n); return `<div class="ex-line"><b>${it.n}</b> = <span class="ko">${r}</span>${sayBtn(r, 'sm')}</div><div class="ex-ru">${S.title}: ${S.use}</div><div class="ex-rule"><button type="button" class="link" data-rule="numbers">Как устроены числа →</button></div>`; };
   const ruleBtn = (id) => `<button type="button" class="link" data-rule="${id}">Правило →</button>`;
   const entryExplain = (e) => `<div class="ex-line"><span class="ko">${esc(e.ko)}</span>${UI.rr(e.ko)}${sayBtn(e.ko, 'sm')}</div><div class="ex-ru">${esc(e.ru)}</div>`;
   const sameKind = (e) => DB.entries.filter((x) => x.kind === e.kind);
@@ -551,6 +551,19 @@
       const tok = idx; $foot.querySelector('.next').addEventListener('click', () => step(() => { marks[idx] = 'intro'; }, tok));
     }
 
+    // Правило перед первой встречей с темой (сейчас — числа): показывается один раз, пока по теме нет прогресса
+    let ruleShown = false;
+    function renderRule(g) {
+      ruleShown = true;
+      $body.innerHTML = `<div class="q-label">Как это устроено</div><div class="q-prompt rule-intro grammar"><h3 class="serif">${esc(g.title)}</h3>
+        ${g.body.map((p) => `<p>${p}</p>`).join('')}
+        <div class="examples">${g.examples.map((x) => `<div class="exm"><div><span class="ko">${esc(x.ko)}</span><div class="muted sm">${esc(x.ru)}</div></div>${sayBtn(x.ko, 'sm')}</div>`).join('')}</div></div>`;
+      $foot.className = 's-foot'; $foot.innerHTML = '<button class="btn wide next">Понятно, начнём</button>';
+      answered = true; q = { kind: 'intro' };
+      $foot.querySelector('.next').addEventListener('click', () => { if (alive) next(); });
+    }
+    const numFresh = () => !['s', 'n'].some((s) => ['small', 'mid', 'big'].some((b) => Store.get(`num:${s}:${b}`)));
+
     // Перелистывание: текущая страница уходит влево, новая въезжает справа
     let turning = false;
     function next() {
@@ -569,6 +582,7 @@
       stepping = false;
       if (idx >= queue.length || timeUp) return finish();
       const it = queue[idx];
+      if (!ruleShown && it.group === 'numbers' && introOk && numFresh()) { progress(); return renderRule(Numbers.RULE); }
       if (introOk && it.entry && it.group === 'words' && !Store.get(it.key) && !introduced.has(it.key) && introCount < 5) {
         introduced.add(it.key); introCount++;
         queue.splice(Math.min(queue.length, idx + 3), 0, it); // проверим через пару вопросов

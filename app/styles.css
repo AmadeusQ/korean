@@ -332,6 +332,9 @@ body.in-session .topbar { display: none; }
 .q-prompt.intro .q-ru { margin-top: 2px; }
 .intro-ex { display: flex; flex-direction: column; gap: 2px; margin-top: 8px; padding-top: 12px; border-top: 1px dashed var(--line); width: 100%; max-width: 420px; }
 .intro-ex .ko { font-size: 18px; }
+.q-prompt.rule-intro { align-items: stretch; text-align: left; gap: 8px; }
+.rule-intro p { margin: 0; line-height: 1.55; }
+.ex-rule { margin-top: 6px; }
 .slot { color: var(--accent); letter-spacing: -.1em; }
 .q-num { font: 500 72px/1 var(--serif); font-variant-numeric: lining-nums; }
 .tbar { flex: 1; height: 6px; background: var(--line); } .tbar i { display: block; height: 100%; background: var(--ink); transition: width .5s linear; }

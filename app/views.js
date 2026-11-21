@@ -243,7 +243,7 @@
 
   // Правило грамматики по кнопке «Правило →» из разбора ответа
   function ruleSheet(id) {
-    const g = DB.grammar(DB.allNums()).find((x) => x.id === id); if (!g) return;
+    const g = DB.grammar(DB.allNums()).find((x) => x.id === id) || (id === Numbers.RULE.id ? Numbers.RULE : null); if (!g) return;
     document.querySelectorAll('.sheet-wrap').forEach((x) => x.remove());
     const box = document.createElement('div'); box.className = 'sheet-wrap';
     box.innerHTML = `<div class="sheet grammar" role="dialog"><button class="icon-btn sheet-x" aria-label="Закрыть">${icon('close')}</button>
