@@ -218,6 +218,7 @@
     box.innerHTML = `<div class="sheet" role="dialog" aria-label="${esc(e.ko)}">
       <button class="icon-btn sheet-x" aria-label="Закрыть">${icon('close')}</button>
       <div class="sheet-head">${UI.cells(e.ko, 'big')}${sayBtn(e.ko)}</div>
+      ${H.pron(e.ko) !== e.ko ? `<div class="sheet-pr">Читается: <span class="ko">[${esc(H.pron(e.ko))}]</span></div>` : ''}
       ${Store.settings().romanize ? `<div class="rr sheet-rr">${esc(H.romanize(e.ko))}</div>` : ''}
       <div class="sheet-ru">${esc(e.ru)}</div>
       <div class="muted sm">${esc(e.c)} · ${e.lessons.map((n) => (n === 0 ? 'мои слова' : `<a class="link" href="#/lesson/${n}">제${n}과</a>`)).join(', ')}</div>

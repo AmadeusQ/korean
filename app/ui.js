@@ -28,7 +28,9 @@
   };
   const icon = (name, cls = '') => `<svg class="ic ${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name] || ''}</svg>`;
   const sayBtn = (ko, cls = '') => `<button class="say ${cls}" data-say="${esc(ko)}" aria-label="Послушать">${icon('speaker')}</button>`;
-  const rr = (ko) => (Store.settings().romanize ? `<span class="rr">${esc(Hangul.romanize(ko))}</span>` : '');
+  // как читается [학쌩], если не совпадает с написанием, и латиница по настройке
+  const pr = (ko) => { const p = Hangul.pron(ko); return p !== ko ? `<span class="pr" title="Так читается">[${esc(p)}]</span>` : ''; };
+  const rr = (ko) => pr(ko) + (Store.settings().romanize ? `<span class="rr">${esc(Hangul.romanize(ko))}</span>` : '');
 
   let toastTimer;
   function toast(msg) {
@@ -62,5 +64,5 @@
   // Печать 도장
   const stamp = (text) => `<div class="stamp" aria-label="${esc(text)}"><span>${esc(text)}</span></div>`;
 
-  window.UI = { esc, shuffle, pick, uniqBy, icon, sayBtn, rr, toast, say, strength, cells, stamp };
+  window.UI = { esc, shuffle, pick, uniqBy, icon, sayBtn, pr, rr, toast, say, strength, cells, stamp };
 })();

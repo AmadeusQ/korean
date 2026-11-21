@@ -63,6 +63,46 @@
     return out;
   }
 
+  // Как слово читается на самом деле (хангылем): 학생 → 학쌩, 한국어 → 한구거, 합니다 → 함니다.
+  // Правила внутри слова без пробелов: связное чтение, ㅎ, назализация, ㄹ, напряжение, нейтрализация патчима.
+  // Исключения на стыке корней (맛없다) и сайсиот (여권 [여꿘]) не учитываются.
+  const TENSE = { 'ㄱ': 'ㄲ', 'ㄷ': 'ㄸ', 'ㅂ': 'ㅃ', 'ㅅ': 'ㅆ', 'ㅈ': 'ㅉ' };
+  const ASPIR = { 'ㄱ': 'ㅋ', 'ㄷ': 'ㅌ', 'ㅂ': 'ㅍ', 'ㅈ': 'ㅊ' };
+  function pronWord(w) {
+    const s = [...w].map((ch) => decompose(ch) || ch);
+    for (let i = 0; i < s.length; i++) {
+      const d = s[i]; if (typeof d === 'string') continue;
+      if (d.jung === 'ㅢ' && d.cho !== 'ㅇ') d.jung = 'ㅣ'; // 희 → 히
+      if (!d.jong) continue;
+      const n = typeof s[i + 1] === 'object' ? s[i + 1] : null;
+      const [stay, move] = SPLIT[d.jong] || ['', d.jong];
+      if (n && n.cho === 'ㅇ') {
+        if (d.jong === 'ㅇ') continue;
+        if (move === 'ㅎ') { d.jong = ''; if (stay) n.cho = stay; continue; } // 좋아요 → 조아요, 많아요 → 마나요
+        let m = stay && move === 'ㅅ' ? 'ㅆ' : move;
+        if (n.jung === 'ㅣ' && (m === 'ㄷ' || m === 'ㅌ')) m = m === 'ㄷ' ? 'ㅈ' : 'ㅊ'; // 같이 → 가치
+        d.jong = stay; n.cho = m; continue;
+      }
+      if (move === 'ㅎ' && n) { // 좋다 → 조타, 좋습니다 → 조씀니다, 놓는 → 논는
+        if (ASPIR[n.cho]) { n.cho = ASPIR[n.cho]; d.jong = stay; continue; }
+        if (n.cho === 'ㅅ') { n.cho = 'ㅆ'; d.jong = stay; continue; }
+        if (n.cho === 'ㄴ') { d.jong = stay || 'ㄴ'; if (d.jong === 'ㄹ') n.cho = 'ㄹ'; continue; }
+      }
+      const snd = JONG_SOUND[d.jong];
+      if (n && n.cho === 'ㅎ' && ASPIR[snd]) { n.cho = ASPIR[snd]; d.jong = stay && stay !== snd ? stay : ''; continue; } // 축하 → 추카
+      d.jong = snd;
+      if (!n) continue;
+      if ((n.cho === 'ㄴ' || n.cho === 'ㅁ') && NASAL[snd]) d.jong = NASAL[snd]; // 합니다 → 함니다
+      else if (n.cho === 'ㄹ') {
+        if (snd === 'ㄴ') d.jong = 'ㄹ'; // 신라 → 실라
+        else if (snd !== 'ㄹ') { n.cho = 'ㄴ'; if (NASAL[snd]) d.jong = NASAL[snd]; } // 정류장 → 정뉴장, 독립 → 동닙
+      } else if (snd === 'ㄹ' && n.cho === 'ㄴ') n.cho = 'ㄹ'; // 설날 → 설랄
+      else if (NASAL[snd] && TENSE[n.cho]) n.cho = TENSE[n.cho]; // 학생 → 학쌩
+    }
+    return s.map((d) => (typeof d === 'string' ? d : compose(d.cho, d.jung, d.jong))).join('');
+  }
+  const pron = (text) => text.split(/(\s+)/).map(pronWord).join('');
+
   // Блоки, которые открываются уроками
   const UNITS = {
     vowels1: {
@@ -129,5 +169,5 @@
     return null;
   }
 
-  window.Hangul = { NAMES, CHO, JUNG, JONG, UNITS, JONG_SOUND, SOUND_RR, decompose, compose, hasBatchim, copula, topic, romanize, similarTo, jamoInfo, isSyllable };
+  window.Hangul = { NAMES, CHO, JUNG, JONG, UNITS, JONG_SOUND, SOUND_RR, decompose, compose, hasBatchim, copula, topic, romanize, pron, similarTo, jamoInfo, isSyllable };
 })();
