@@ -198,7 +198,7 @@
         ${l.number === Practice.introLesson() ? `<div class="card"><h3>Расскажи о себе</h3><p class="sm">Впиши своё имя, страну и профессию — получится твой 자기소개, его можно собирать из плашек и повторять вслух.</p><a class="link" href="#/intro">Составить рассказ о себе →</a></div>` : ''}
         ${units.length ? `<div class="card"><h3>Хангыль в этом уроке</h3><div class="chips">${units.map((u) => `<span class="chip">${u.title}</span>`).join('')}</div><a class="link" href="#/hangul">Открыть таблицу хангыля →</a></div>` : ''}
         <h2 class="h">Как тренировать</h2>${modeGrid([l.number])}
-        <p class="muted xs report">Нашёл ошибку в уроке? <a class="link" href="https://github.com/AmadeusQ/korean/issues/new" target="_blank" rel="noopener">Напиши об этом</a>.</p>`;
+        <p class="muted xs report">Нашёл ошибку в уроке? <button type="button" class="link" data-report="${l.number}">Напиши об этом</button>.</p>`;
     },
     words: (l) => `<div class="card list">${l.words.map(wordRow).join('')}</div>`,
     phrases: (l) => {
@@ -305,6 +305,48 @@
     document.body.appendChild(box);
   }
   document.addEventListener('click', (ev) => { const b = ev.target.closest('[data-rule]'); if (b) { ev.preventDefault(); ruleSheet(b.dataset.rule); } });
+
+  // ---------- Сообщить об ошибке ----------
+  // Уходит в Google Форму (ответы в таблице у автора): без входа куда-либо и без перехода со страницы.
+  const REPORT_URL = 'https://docs.google.com/forms/d/e/1FAIpQLSfs_br18xE9lVd09HzwTQRZEjl042YH5ugRiIyzeXPSL2uwRA/formResponse';
+  const REPORT_FIELD = 'entry.1084018497';
+  // context — что приложится к сообщению: урок, задание, ответы (пишущий видит это под «Что ещё отправится»)
+  function report(context) {
+    document.querySelectorAll('.sheet-wrap').forEach((x) => x.remove());
+    const box = document.createElement('div'); box.className = 'sheet-wrap';
+    box.innerHTML = `<form class="sheet report-sheet" role="dialog" aria-label="Сообщить об ошибке"><button type="button" class="icon-btn sheet-x" aria-label="Закрыть">${icon('close')}</button>
+      <h3>Сообщить об ошибке</h3>
+      <label class="note-field"><span class="sm">Что не так?</span><textarea class="rep-in" maxlength="1000" rows="4" required placeholder="Например: неверный перевод, ответ засчитан неправильно, слово читается иначе"></textarea></label>
+      <details class="rep-ctx"><summary class="muted xs">Что ещё отправится</summary><pre class="xs">${esc(context)}</pre></details>
+      <div class="row"><button class="btn">Отправить</button><button type="button" class="btn ghost rep-cancel">Отмена</button></div></form>`;
+    const form = box.querySelector('form'), ta = box.querySelector('.rep-in');
+    const close = () => { box.remove(); document.removeEventListener('keydown', key, true); };
+    // клавиши в окне не отдаём тренировке: Enter в поле не должен листать вопрос, цифры — выбирать вариант
+    const key = (ev) => { if (!box.isConnected) return close(); if (!box.contains(ev.target) && ev.key !== 'Escape') return; ev.stopPropagation(); if (ev.key === 'Escape') close(); };
+    box.addEventListener('click', (ev) => { if (ev.target === box || ev.target.closest('.sheet-x, .rep-cancel')) close(); });
+    form.addEventListener('submit', async (ev) => {
+      ev.preventDefault();
+      const text = ta.value.trim(); if (!text) return;
+      const btn = form.querySelector('.btn'); btn.disabled = true; btn.textContent = 'Отправляю…';
+      const where = `${matchMedia('(pointer: coarse)').matches ? 'телефон' : 'компьютер'} · голос: ${TTS.voiceName() || 'нет'} · ${new Date().toLocaleString('ru-RU')}`;
+      try {
+        // ответ Google Формы закрыт (no-cors): узнать можно только о сбое сети
+        await fetch(REPORT_URL, { method: 'POST', mode: 'no-cors', body: new URLSearchParams({ [REPORT_FIELD]: `${text}\n\n---\n${context}\n${where}`.slice(0, 4000) }) });
+        close(); UI.toast('Спасибо, сообщение отправлено');
+      } catch {
+        btn.disabled = false; btn.textContent = 'Отправить';
+        UI.toast('Не отправилось: нет сети. Текст остался, попробуй ещё раз');
+      }
+    });
+    document.addEventListener('keydown', key, true);
+    document.body.appendChild(box);
+    setTimeout(() => ta.focus(), 50);
+  }
+  document.addEventListener('click', (ev) => {
+    const b = ev.target.closest('[data-report]'); if (!b) return;
+    const l = DB.lesson(b.dataset.report);
+    report(l ? `Урок ${l.number}: ${l.title}` : `Страница ${location.hash || '#/'}`);
+  });
 
   // ---------- Словарь ----------
   const dictState = { q: '', lesson: 'all', cat: 'all', sort: 'lesson', hard: false };
@@ -620,5 +662,5 @@
     if (t === 'auto') document.documentElement.removeAttribute('data-theme'); else document.documentElement.dataset.theme = t;
   }
 
-  window.Views = { home, lessons, lesson, dict, hangul, practiceMenu, settings, importLink, intro, progress, applyTheme };
+  window.Views = { report, home, lessons, lesson, dict, hangul, practiceMenu, settings, importLink, intro, progress, applyTheme };
 })();

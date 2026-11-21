@@ -830,7 +830,7 @@
     function choose_(i) {
       if (answered) return;
       const btns = $body.querySelectorAll('.opt');
-      const ok = q.options[i].ok;
+      const ok = q.options[i].ok; q.given = q.options[i].text;
       btns.forEach((b, k) => { b.disabled = true; if (q.options[k].ok) b.classList.add('right'); });
       if (!ok) btns[i].classList.add('wrong');
       done(ok);
@@ -846,7 +846,7 @@
       $body.querySelector('.show-hint').addEventListener('click', (e) => { e.target.textContent = 'Начинается с: ' + [...q.answer][0]; });
       f.addEventListener('submit', (e) => {
         e.preventDefault(); if (answered) return;
-        const v = inp.value.trim(); if (!v) return;
+        const v = inp.value.trim(); if (!v) return; q.given = v;
         // другой верный вариант: слово с тем же переводом или звучащее так же (в диктанте)
         const alt = (q.accept || []).find((a) => norm(a) === norm(v));
         const ok = norm(v) === norm(q.answer) || !!alt;
@@ -934,7 +934,7 @@
         $bank.querySelectorAll('.tok').forEach((b) => b.addEventListener('click', () => {
           if (answered) return; picked.push(+b.dataset.t); draw();
           if (picked.length === (q.need || q.tokens.length)) {
-            const ok = picked.map((t) => q.tokens[t]).join(' ') === (q.answerToks || q.tokens).join(' ');
+            const ok = picked.map((t) => q.tokens[t]).join(' ') === (q.answerToks || q.tokens).join(' '); q.given = picked.map((t) => q.tokens[t]).join(' ');
             $line.classList.add(ok ? 'right' : 'wrong'); done(ok);
           }
         }));
@@ -995,11 +995,22 @@
       $foot.className = 's-foot show ' + (ok ? 'ok' : 'bad');
       $foot.innerHTML = `<div class="fb"><div class="fb-title">${ok ? pick(['맞아요', '좋아요', '잘했어요']) + ' <small>верно</small>' : '틀렸어요 <small>правильный ответ</small>'}</div>
         <div class="fb-ex">${q.explain || ''}</div></div><button class="btn wide next">Дальше</button>
-        ${!ok && q.kind === 'choice' && !q.undone && !isTimed && !isTest ? '<button type="button" class="link undo-miss">Я промахнулся, ответить ещё раз</button>' : ''}`;
+        ${!ok && q.kind === 'choice' && !q.undone && !isTimed && !isTest ? '<button type="button" class="link undo-miss">Я промахнулся, ответить ещё раз</button>' : ''}
+        <button type="button" class="link report-q">Ошибка в задании?</button>`;
       const nb = $foot.querySelector('.next');
       const tok = idx; const go = () => step(undefined, tok);
       $foot.querySelector('.undo-miss')?.addEventListener('click', () => undoMiss(tok));
+      $foot.querySelector('.report-q').addEventListener('click', () => Views.report(reportContext(q)));
       nb.addEventListener('click', go); nb.focus({ preventScroll: true });
+    }
+
+    // Что приложить к сообщению об ошибке: задание, как его видел ученик, верный ответ и что он ответил
+    function reportContext(q) {
+      const text = (html) => { const d = document.createElement('div'); d.innerHTML = html || ''; d.querySelectorAll('button').forEach((b) => b.remove()); d.querySelectorAll('div, p').forEach((b) => b.append(' ')); return d.textContent.replace(/\s+/g, ' ').trim(); };
+      const right = q.kind === 'choice' ? q.options.find((o) => o.ok)?.text : q.kind === 'build' ? (q.answerToks || q.tokens).join(' ') : q.answer || q.target || q.entry?.ko || '';
+      return [`Режим: ${MODES[mode].title} · уроки ${nums.join(', ')}`, `Задание: ${q.label || ''} — ${text(q.prompt)}`,
+        q.kind === 'choice' ? `Варианты: ${q.options.map((o) => o.text).join(' / ')}` : '', `Верный ответ: ${right}`, q.given !== undefined ? `Ответ ученика: ${q.given}` : '', `Ключ: ${q.item?.key || ''}`]
+        .filter(Boolean).join('\n');
     }
 
     function finish() {
