@@ -139,12 +139,16 @@
       for (const [d, v] of Object.entries(other.days)) { const m = state.days[d]; if (!m || v.n > m.n) state.days[d] = v; }
       for (const [n, t] of Object.entries(other.tests)) { const m = state.tests[n]; if (!m || t.best > m.best) state.tests[n] = t; }
       for (const w of other.custom) if (!state.custom.some((x) => x.ko === w.ko)) state.custom.push(w);
+      // рекорды: в «Найди пары» лучше меньшее время, в «5 минутах» — больше ответов
+      const om = other.meta; state.meta = state.meta || {};
+      if (om.matchBest && (!state.meta.matchBest || om.matchBest < state.meta.matchBest)) state.meta.matchBest = om.matchBest;
+      if (om.timedBest && om.timedBest > (state.meta.timedBest || 0)) state.meta.timedBest = om.timedBest;
       save();
     },
     keys: () => Object.keys(state.items),
     // Компактная строка для ссылки переноса (без настроек)
     async pack() {
-      const json = JSON.stringify({ items: state.items, days: state.days, tests: state.tests || {}, custom: state.custom || [] });
+      const json = JSON.stringify({ items: state.items, days: state.days, tests: state.tests || {}, custom: state.custom || [], meta: { matchBest: state.meta?.matchBest, timedBest: state.meta?.timedBest } });
       let bytes = new TextEncoder().encode(json), z = '0';
       if (window.CompressionStream) { bytes = new Uint8Array(await new Response(new Blob([bytes]).stream().pipeThrough(new CompressionStream('gzip'))).arrayBuffer()); z = '1'; }
       let bin = ''; bytes.forEach((b) => (bin += String.fromCharCode(b)));

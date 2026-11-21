@@ -76,6 +76,8 @@
       if (!d.jong) continue;
       const n = typeof s[i + 1] === 'object' ? s[i + 1] : null;
       const [stay, move] = SPLIT[d.jong] || ['', d.jong];
+      // числа: 육 после патчима получает ㄴ — 십육 [심뉵], 백육 [뱅뉵]
+      if (n && n.cho === 'ㅇ' && n.jung === 'ㅠ' && n.jong === 'ㄱ' && ['십', '백', '천', '만'].includes(w[i]) && !s[i + 2]) n.cho = 'ㄴ'; // 근육 [그뉵] не задеваем
       if (n && n.cho === 'ㅇ') {
         if (d.jong === 'ㅇ') continue;
         if (move === 'ㅎ') { d.jong = ''; if (stay) n.cho = stay; continue; } // 좋아요 → 조아요, 많아요 → 마나요

@@ -447,7 +447,9 @@
     'dialog-line'(it) {
       const d = it.dlg, line = d.lines[it.i];
       const prev = d.lines.slice(Math.max(0, it.i - 3), it.i);
-      const pool = uniqBy([...DB.dialogues(DB.allNums()).flatMap((x) => x.lines), ...DB.entries.filter((e) => e.kind === 'phrase')], (x) => bare(x.ko))
+      // обманки только из уроков до этого диалога: реплики будущих уроков ученик ещё не видел
+      const upTo = DB.allNums().filter((n) => n > 0 && n <= d.lesson);
+      const pool = uniqBy([...DB.dialogues(upTo).flatMap((x) => x.lines), ...DB.entriesFor(upTo).filter((e) => e.kind === 'phrase')], (x) => bare(x.ko))
         .filter((x) => bare(x.ko) !== bare(line.ko));
       const near = pool.filter((x) => Math.abs(x.ko.length - line.ko.length) <= 8);
       const ds = shuffle(near.length >= 3 ? near : pool).slice(0, 3);
@@ -573,7 +575,9 @@
     // Знакомство с новым словом: показать карточку, а проверить чуть позже
     function renderIntro(it) {
       const e = it.entry;
-      const ex = sentenceLines(DB.allNums()).find((l) => l.ko.split(/\s+/).some((t) => t.startsWith(e.ko)) && l.ko !== e.ko);
+      // пример из уроков, где слово уже встретилось (свои слова — из любых)
+      const upTo = Math.max(...e.lessons) || Infinity;
+      const ex = sentenceLines(DB.allNums().filter((n) => n > 0 && n <= upTo)).find((l) => l.ko.split(/\s+/).some((t) => t.startsWith(e.ko)) && l.ko !== e.ko);
       $body.innerHTML = `<div class="q-label">Новое слово</div><div class="q-prompt intro">${UI.cells(e.ko, 'big')}${sayBtn(e.ko)}
         ${UI.rr(e.ko)}<div class="q-ru">${esc(e.ru)}</div>
         ${ex ? `<div class="intro-ex"><span class="ko">${esc(ex.ko)}</span><span class="muted sm">${esc(ex.ru)}</span></div>` : ''}</div>`;
