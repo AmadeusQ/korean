@@ -220,7 +220,7 @@
   }
   // для режима диалога: 1–2 случайных диалога целиком, по порядку реплик
   function dialogQueue(nums) {
-    const ds = shuffle(DB.dialogues(nums)).slice(0, 2);
+    const ds = shuffle(DB.dialogues(nums).filter((d) => d.lines.length > 1)).slice(0, 2); // из одной реплики вопроса не выйдет
     return ds.flatMap((d) => d.lines.slice(1).map((l, k) => ({ group: 'build', key: 'dl:' + l.ko, types: ['dialog-line'], dlg: d, i: k + 1 })));
   }
 
