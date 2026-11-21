@@ -8,8 +8,9 @@
     words: { title: 'Слова', desc: 'Перевод в обе стороны и набор', ex: '책' },
     cards: { title: 'Карточки', desc: 'Вспомни перевод и оцени себя', ex: '카드' },
     listen: { title: 'Аудирование', desc: 'Услышь и выбери, что прозвучало', ex: '듣기', tts: true },
+    sounds: { title: 'Похожие звуки', desc: 'Различай на слух 가/카/까 и 부리/뿌리', ex: '불·뿔', tts: true },
     hangul: { title: 'Хангыль', desc: 'Буквы, слоги и патчим', ex: 'ㄱ+ㅏ' },
-    grammar: { title: 'Грамматика', desc: '이에요 / 예요 и 은 / 는', ex: '-예요' },
+    grammar: { title: 'Грамматика', desc: '이에요 / 예요, 은 / 는, ответ 네 / 아니요', ex: '-예요' },
     build: { title: 'Фразы', desc: 'Собери фразу и вставь пропущенное слово', ex: '저는…' },
     translate: { title: 'Составь предложение', desc: 'Переведи с русского: слова и частицы по отдельности', ex: '은/는' },
     read: { title: 'Прочитай и ответь', desc: 'Короткий текст или диалог и вопрос по нему', ex: '읽기' },
@@ -23,6 +24,9 @@
     mistakes: { title: 'Мои ошибки', desc: 'Только то, в чём ошибаешься', ex: '오답', hidden: true },
     test: { title: 'Контрольная', desc: '20 вопросов по уроку без повторов', ex: '시험', hidden: true },
   };
+  // «Перед тобой: …» — только то, что можно показать (не «низ» или «причина»)
+  const YESNO_C = ['Вещи', 'Еда', 'Животные', 'Природа', 'Профессии', 'Люди', 'Тело'];
+  const showable = (e) => e.kind === 'word' && !e.t && !/\s/.test(e.ko) && YESNO_C.includes(e.c) && (e.c !== 'Люди' || e.p);
   const SESSION_LEN = 15, TEST_LEN = 20, FILTER_LEN = 30; // выборка из словаря: до 30 слов за раз
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   const micSupported = () => !!SR;
@@ -51,6 +55,14 @@
       return micSupported() ? DB.entriesFor(nums).filter((e) => [...e.ko].length <= 12)
         .map((e) => ({ group: 'speak', key: 'speak:' + e.ko, types: ['speak'], entry: e })) : [];
     }
+    if (mode === 'sounds') {
+      if (!TTS.available()) return [];
+      const J = unlocked(nums);
+      return [
+        ...DB.entriesFor(nums).filter((e) => e.kind === 'word' && soundAlikes(e.ko).length >= 2).map((e) => ({ group: 'words', key: e.key, types: ['listen-pair'], entry: e })),
+        ...[...J.cons, ...J.vowels].map((j) => ({ group: 'hangul', key: 'j:' + j, types: ['listen-syll'], jamo: j, J })),
+      ];
+    }
     if (mode === 'dialog') return dialogLines(nums);
     if (mode === 'read') return readItems(nums);
     if (mode === 'timed') return buildPool('mix', nums);
@@ -73,6 +85,7 @@
           if (typing && e.kind === 'word' && [...e.ko].length <= 5) t.push('type');
           if (mode === 'mix' && tts) t.push('listen-word');
         }
+        if (tts && mode !== 'cards' && mode !== 'words' && e.kind === 'word' && soundAlikes(e.ko).length >= 2) t.push('listen-pair');
         add('words', e.key, t, { entry: e });
       }
     }
@@ -94,6 +107,7 @@
       const nouns = entries.filter((e) => e.kind === 'word' && !e.t);
       const persons = entries.filter((e) => e.p), jobs = entries.filter((e) => e.job);
       if (gids.includes('copula')) shuffle(nouns).slice(0, 25).forEach((e) => add('grammar', 'g:copula:' + e.ko, ['copula'], { entry: e }));
+      if (gids.includes('yesno')) shuffle(nouns.filter(showable)).slice(0, 20).forEach((e) => add('grammar', 'g:yesno:' + e.ko, ['yesno'], { entry: e }));
       if (gids.includes('topic')) {
         shuffle([...persons, ...nouns]).slice(0, 20).forEach((e) => add('grammar', 'g:topic:' + e.ko, ['topic'], { entry: e }));
         for (let i = 0; i < 12 && persons.length && jobs.length; i++) {
@@ -134,12 +148,13 @@
     switch (kind) {
       case 'w': { const e = word(arg); if (!e) return null;
         const t = ['ko-ru', 'ru-ko']; if (Store.settings().typing && e.kind === 'word' && [...e.ko].length <= 5) t.push('type'); if (tts) t.push('listen-word');
+        if (tts && e.kind === 'word' && soundAlikes(e.ko).length >= 2) t.push('listen-pair');
         return { group: 'words', key, types: t, entry: e }; }
       case 'j': return J.vowels.concat(J.cons).includes(arg) ? { group: 'hangul', key, types: ['jamo-read', 'syll-read', 'compose'].concat(H.NAMES[arg] && J.units.includes('names') ? ['jamo-name'] : []), jamo: arg, J } : null;
       case 'b': { const e = word(arg); return e ? { group: 'hangul', key, types: ['batchim'], entry: e } : null; }
       case 'g': {
         const [gid, ...g] = rest; const val = g.join(':');
-        if (gid === 'copula' || gid === 'topic') { const e = word(val); return e ? { group: 'grammar', key, types: [gid], entry: e } : null; }
+        if (gid === 'copula' || gid === 'topic' || gid === 'yesno') { const e = word(val); return e ? { group: 'grammar', key, types: [gid], entry: e } : null; }
         if (gid === 'sent') { const [pk, jk] = val.split('|'); const p = word(pk), jb = word(jk); return p?.p && jb?.job ? { group: 'grammar', key, types: ['sentence'], p, jb } : null; }
         return null;
       }
@@ -289,6 +304,22 @@
   const soundsSame = (a, b, cons) => HOMOPHONES.some((g) => g.includes(a) && g.includes(b))
     || (cons !== 'ㅇ' && [a, b].includes('ㅢ') && [a, b].includes('ㅣ'))
     || (cons !== 'ㅇ' && cons !== 'ㄹ' && [a, b].every((x) => ['ㅐ', 'ㅔ', 'ㅒ', 'ㅖ'].includes(x))); // 계 звучит как 게
+  // Похожие на слух слова: в одном слоге согласная заменена на парную (부리 → 뿌리, 푸리) или гласная на близкую (나무 → 너무).
+  // Согласную после патчима не меняем: там ㄱ и ㄲ звучат одинаково (학교 [학꾜]). Настоящие слова из словаря — первыми.
+  function soundAlikes(ko) {
+    const s = [...ko];
+    if (s.length > 4 || !s.every(H.isSyllable)) return [];
+    const out = [];
+    const swap = (i, ch) => s.slice(0, i).join('') + ch + s.slice(i + 1).join('');
+    s.forEach((ch, i) => {
+      const d = H.decompose(ch), afterJong = i > 0 && H.decompose(s[i - 1]).jong;
+      if (d.cho !== 'ㅇ' && !afterJong) H.similarTo(d.cho).forEach((c) => out.push({ ko: swap(i, H.compose(c, d.jung, d.jong)), a: d.cho, b: c }));
+      // не первый слог: 의 читается [이] (오이 = 오의), такие варианты на слух не различить
+      H.similarTo(d.jung).filter((v) => !soundsSame(v, d.jung, i ? 'ㄱ' : d.cho)).forEach((v) => out.push({ ko: swap(i, H.compose(d.cho, v, d.jong)), a: d.jung, b: v }));
+    });
+    const alts = uniqBy(out.filter((x) => x.ko && x.ko !== ko), (x) => x.ko);
+    return [...alts.filter((x) => DB.byKo.has(x.ko)), ...alts.filter((x) => !DB.byKo.has(x.ko))];
+  }
   function syllFor(j, J) {
     const info = H.jamoInfo(j);
     if (info.kind === 'vowel') { const c = J.cons.length ? pick(J.cons.filter((x) => x !== 'ㅇ').concat('ㅇ')) : 'ㅇ'; return { c, v: j, target: 'v' }; }
@@ -314,6 +345,35 @@
       return { kind: 'choice', label: 'Что прозвучало?', autoplay: e.ko,
         prompt: listenBtns(e.ko, 'Нажми, чтобы послушать ещё раз'),
         options: shuffle([e, ...ds]).map((x) => ({ text: bare(x.ko), ok: x === e, ko: true })), explain: entryExplain(e) };
+    },
+    'listen-pair'(it) {
+      const e = it.entry; const alts = soundAlikes(e.ko);
+      // одна обманка — настоящее слово, если есть, вторая случайная: как тройки 가/카/까 в учебнике
+      const ds = uniqBy([...alts.slice(0, 1).filter((x) => DB.byKo.has(x.ko)), ...shuffle(alts)], (x) => x.ko).slice(0, 2);
+      const diff = (x) => `<div class="ex-ru"><span class="ko">${esc(x.ko)}</span>${sayBtn(x.ko, 'sm')} — <span class="ko">${esc(x.b)}</span> вместо <span class="ko">${esc(x.a)}</span>${DB.byKo.has(x.ko) ? ` · ${esc(DB.byKo.get(x.ko).ru)}` : ''}</div>`;
+      return { kind: 'choice', label: 'Что прозвучало? Звуки похожи', autoplay: e.ko,
+        prompt: listenBtns(e.ko, 'Варианты отличаются одним звуком'),
+        options: shuffle([e.ko, ...ds.map((x) => x.ko)]).map((x) => ({ text: x, ok: x === e.ko, ko: true })),
+        explain: entryExplain(e) + ds.map(diff).join('') };
+    },
+    yesno(it) {
+      // «Перед тобой шапка. 책이에요?» — 아니요, 모자예요.
+      const e = it.entry;
+      // 학생 и 대학생 не противопоставляем: студент университета — тоже студент
+      const same = DB.entries.filter((x) => showable(x) && !x.ko.includes(e.ko) && !e.ko.includes(x.ko) && shortRu(x.ru) !== shortRu(e.ru) && (e.job ? x.job : !x.job && x.c === e.c));
+      const asked = same.length && Math.random() < 0.6 ? pick(same) : e;
+      const yes = asked === e;
+      const cop = (w) => w + H.copula(w), badCop = (w) => w + (H.copula(w) === '이에요' ? '예요' : '이에요');
+      const right = `${yes ? '네' : '아니요'}, ${cop(e.ko)}`;
+      const other = same.filter((x) => x !== asked);
+      const opts = uniqBy([right, `${yes ? '아니요' : '네'}, ${cop(e.ko)}`, `${yes ? '네' : '아니요'}, ${badCop(e.ko)}`,
+        yes ? (other.length ? `아니요, ${cop(pick(other).ko)}` : '') : `네, ${cop(asked.ko)}`].filter(Boolean), (x) => x);
+      const question = cop(asked.ko) + '?';
+      return { kind: 'choice', label: 'Ответь на вопрос', autoplay: question,
+        prompt: `<div class="hint">Перед тобой: <b>${esc(shortRu(e.ru))}</b></div><div class="q-ko md">${esc(question)}</div>${sayBtn(question)}`,
+        options: shuffle(opts).map((x) => ({ text: x, ok: x === right, ko: true })), sayAfter: right + '.',
+        explain: `<div class="ex-line">${yes ? `Да, это ${esc(shortRu(e.ru))}` : `Это не ${esc(shortRu(asked.ru))}, а ${esc(shortRu(e.ru))}`} → <span class="ko">${esc(right)}.</span>${sayBtn(right, 'sm')}</div>
+          <div class="ex-ru"><span class="ko">${esc(e.ko)}</span> кончается на ${H.hasBatchim(e.ko) ? 'согласную → 이에요' : 'гласную → 예요'}</div><div class="row"><button type="button" class="link" data-rule="yesno">Правило 네/아니요 →</button><button type="button" class="link" data-rule="copula">Правило 이에요/예요 →</button></div>` };
     },
     type(it) {
       const e = it.entry;

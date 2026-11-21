@@ -24,7 +24,7 @@ for (const f of files) {
 const WORD_C = ['Люди', 'Профессии', 'Страны', 'Еда', 'Вещи', 'Места', 'Природа', 'Животные', 'Тело', 'Время', 'Действия', 'Описание', 'Числа', 'Служебные'];
 const T = ['v', 'adv', 'pron', 'excl', 'cnt', 'suf', 'num'];
 const HANGUL = ['vowels1', 'consonants1', 'vowels2', 'consonants2', 'batchim', 'names'];
-const GRAMMAR = ['copula', 'topic', 'yesno']; // известные id; генераторы есть для copula и topic
+const GRAMMAR = ['copula', 'topic', 'yesno']; // известные id; генераторы есть для copula, topic и yesno
 const hasKo = (s) => /[가-힣]/.test(s);
 const sentences = (s) => (s.match(/[^.?!]+[.?!]*/g) || []).map((x) => x.trim()).filter(Boolean);
 
