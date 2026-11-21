@@ -40,12 +40,12 @@
     clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), 2600);
   }
 
-  function say(text) {
-    if (!TTS.speak(text)) toast('Нет корейского голоса для озвучки — см. «Настройки»');
+  function say(text, rate) {
+    if (!TTS.speak(text, rate)) toast('Нет корейского голоса для озвучки — см. «Настройки»');
   }
   document.addEventListener('click', (e) => {
     const b = e.target.closest('[data-say]');
-    if (b) { e.preventDefault(); e.stopPropagation(); say(b.dataset.say); }
+    if (b) { e.preventDefault(); e.stopPropagation(); say(b.dataset.say, b.dataset.slow ? Math.max(0.45, Store.settings().rate * 0.6) : undefined); }
   });
 
   // Сила запоминания: 0..6 → 4 клетки

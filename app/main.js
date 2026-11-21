@@ -33,6 +33,7 @@
     route();
     // голоса в Chrome подгружаются с задержкой — перерисуем, когда появятся
     if (window.speechSynthesis) speechSynthesis.addEventListener?.('voiceschanged', () => { if (!document.body.classList.contains('in-session')) route(); }, { once: true });
+    if (Store.keys().length && !/firefox/i.test(navigator.userAgent)) navigator.storage?.persist?.().catch(() => {});
     if ('serviceWorker' in navigator && location.protocol.startsWith('http')) navigator.serviceWorker.register('sw.js').catch(() => {});
   }
   boot();

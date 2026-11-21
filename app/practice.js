@@ -12,6 +12,7 @@
     grammar: { title: 'Грамматика', desc: '이에요 / 예요 и 은 / 는', ex: '-예요' },
     build: { title: 'Фразы', desc: 'Собери фразу и вставь пропущенное слово', ex: '저는…' },
     translate: { title: 'Составь предложение', desc: 'Переведи с русского: слова и частицы по отдельности', ex: '은/는' },
+    read: { title: 'Прочитай и ответь', desc: 'Короткий текст или диалог и вопрос по нему', ex: '읽기' },
     match: { title: 'Найди пары', desc: 'Соедини слова с переводом на время', ex: '짝' },
     timed: { title: '5 минут', desc: 'Сколько успеешь за пять минут', ex: '5분' },
     numbers: { title: 'Числа', desc: '일, 이, 삼 и 하나, 둘, 셋', ex: '123' },
@@ -51,6 +52,7 @@
         .map((e) => ({ group: 'speak', key: 'speak:' + e.ko, types: ['speak'], entry: e })) : [];
     }
     if (mode === 'dialog') return dialogLines(nums);
+    if (mode === 'read') return readItems(nums);
     if (mode === 'timed') return buildPool('mix', nums);
     if (mode === 'match') return buildPool('words', nums).filter((it) => it.entry.kind === 'word' && [...it.entry.ko].length <= 6);
     if (mode === 'numbers') return ['s', 'n'].flatMap((sys) => Numbers.sample(sys, 12).map((n) => numItem(sys, n)));
@@ -104,7 +106,7 @@
       const lines = sentenceLines(nums, true);
       lines.forEach((l) => add('build', 'build:' + l.ko, ['build'], { line: l }));
       lines.forEach((l) => { const c = clozeTarget(l); if (c) add('build', 'cloze:' + l.ko, ['cloze'], { line: l, ...c }); });
-      if (mode === 'mix') pool.push(...dialogLines(nums));
+      if (mode === 'mix') pool.push(...dialogLines(nums), ...readItems(nums));
     }
     if (['mix', 'translate'].includes(mode)) {
       translateLines(nums).forEach((l) => add('build', 'tr:' + l.ko, ['translate'], { line: l, toks: l.toks }));
@@ -151,6 +153,7 @@
         if (!p || !jb || !p.p || !jb.job) return null;
         const pl = pairLine(p, jb); return { group: 'build', key, types: ['translate'], line: pl, toks: pl.toks };
       }
+      case 'rd': return readItems(nums).find((x) => x.key === key) || null;
       case 'dl': { for (const d of DB.dialogues(nums)) { const i = d.lines.findIndex((l, k) => k > 0 && l.ko === arg); if (i > 0) return { group: 'build', key, types: ['dialog-line'], dlg: d, i }; } return null; }
       case 'write': {
         if (rest[0] === 'j') { const j = rest.slice(1).join(':'); return J.vowels.concat(J.cons).includes(j) ? { group: 'write', key, types: ['write'], target: j, jamo: true } : null; }
@@ -227,6 +230,10 @@
     return DB.dialogues(nums).flatMap((d) => d.lines.slice(1).map((l, k) => ({ group: 'build', key: 'dl:' + l.ko, types: ['dialog-line'], dlg: d, i: k + 1 })));
   }
   // для режима диалога: 1–2 случайных диалога целиком, по порядку реплик
+  // «Прочитай и ответь»: вопросы на понимание из dialogues[].questions
+  function readItems(nums) {
+    return DB.dialogues(nums).flatMap((d) => (d.questions || []).map((q) => ({ group: 'build', key: 'rd:' + q.q, types: ['read'], dlg: d, rq: q })));
+  }
   function dialogQueue(nums) {
     const ds = shuffle(DB.dialogues(nums).filter((d) => d.lines.length > 1)).slice(0, 2); // из одной реплики вопроса не выйдет
     return ds.flatMap((d) => d.lines.slice(1).map((l, k) => ({ group: 'build', key: 'dl:' + l.ko, types: ['dialog-line'], dlg: d, i: k + 1 })));
@@ -267,6 +274,8 @@
   // Знаки препинания в вариантах и плашках подсказывали ответ (вопрос — тот, что с «?», плашка с точкой — последняя)
   const bare = (s) => s.replace(/[.,!?…]/g, '').replace(/\s+/g, ' ').trim();
   const tail = (s) => s.replace(/[.?!…]+$/, '');
+  // большая кнопка «послушать» и под ней «медленнее»
+  const listenBtns = (ko, hint) => `<button class="big-say" data-say="${esc(ko)}">${icon('speaker')}</button><button type="button" class="link slow-say" data-say="${esc(ko)}" data-slow="1">Медленнее</button><div class="hint">${hint}</div>`;
   const sameKind = (e) => DB.entries.filter((x) => x.kind === e.kind);
   const lenNear = (e) => sameKind(e).filter((x) => Math.abs([...x.ko].length - [...e.ko].length) <= 1);
 
@@ -302,7 +311,7 @@
       const e = it.entry;
       const ds = fillDistractors(e, lenNear(e), sameKind(e), 3, (x) => bare(x.ko));
       return { kind: 'choice', label: 'Что прозвучало?', autoplay: e.ko,
-        prompt: `<button class="big-say" data-say="${esc(e.ko)}">${icon('speaker')}</button><div class="hint">Нажми, чтобы послушать ещё раз</div>`,
+        prompt: listenBtns(e.ko, 'Нажми, чтобы послушать ещё раз'),
         options: shuffle([e, ...ds]).map((x) => ({ text: bare(x.ko), ok: x === e, ko: true })), explain: entryExplain(e) };
     },
     type(it) {
@@ -348,7 +357,7 @@
       const vs = variants(it.jamo, it.J, 10).filter((x) => target !== 'v' || !soundsSame(x, it.jamo, c)).slice(0, 3)
         .map((x) => (target === 'v' ? H.compose(c, x) : H.compose(x, v)));
       return { kind: 'choice', label: 'Какой слог прозвучал?', autoplay: s,
-        prompt: `<button class="big-say" data-say="${s}">${icon('speaker')}</button><div class="hint">Нажми, чтобы послушать ещё раз</div>`,
+        prompt: listenBtns(s, 'Нажми, чтобы послушать ещё раз'),
         options: shuffle(uniqBy([s, ...vs], (x) => x).map((x) => ({ text: x, ok: x === s, ko: true }))),
         explain: `<div class="ex-line"><span class="ko">${s}</span> <span class="rr">${H.romanize(s)}</span>${sayBtn(s, 'sm')}</div>` };
     },
@@ -393,7 +402,7 @@
     shadow(it) {
       const l = it.line;
       return { kind: 'speak', label: 'Послушай и повтори', autoplay: l.ko, fuzzy: true, answer: l.ko,
-        prompt: `<div class="q-ko md">${esc(l.ko)}</div><div class="hint">${esc(l.ru)}</div>${sayBtn(l.ko)}`,
+        prompt: `<div class="q-ko md">${esc(l.ko)}</div><div class="hint">${esc(l.ru)}</div><div class="row">${sayBtn(l.ko)}<button type="button" class="link slow-say" data-say="${esc(l.ko)}" data-slow="1">Медленнее</button></div>`,
         explain: `<div class="ex-line"><span class="ko">${esc(l.ko)}</span>${sayBtn(l.ko, 'sm')}</div><div class="ex-ru">${esc(l.ru)}</div>` };
     },
     'num-read'(it) {
@@ -409,7 +418,7 @@
     'num-listen'(it) {
       const S = Numbers.SYSTEMS[it.sys]; const ds = shuffle(Numbers.near(it.n, it.sys)).slice(0, 3);
       return { kind: 'choice', label: 'Какое число прозвучало?', autoplay: S.read(it.n),
-        prompt: `<button class="big-say" data-say="${S.read(it.n)}">${icon('speaker')}</button><div class="hint">${S.title}</div>`,
+        prompt: listenBtns(S.read(it.n), S.title),
         options: shuffle([it.n, ...ds]).map((x) => ({ text: String(x), ok: x === it.n })), explain: numExplain(it) };
     },
     write(it) {
@@ -424,6 +433,15 @@
       const e = it.entry;
       return { kind: 'speak', label: 'Скажи вслух', prompt: `${UI.cells(e.ko, 'big')}<div class="hint">${esc(e.ru)}${Store.settings().romanize ? ' · ' + esc(H.romanize(e.ko)) : ''}</div>${sayBtn(e.ko)}`,
         answer: e.ko, explain: entryExplain(e) };
+    },
+    read(it) {
+      const d = it.dlg, q = it.rq, at = d.lines[q.at];
+      const text = d.lines.map((l) => l.ko).join(' ');
+      return { kind: 'choice', label: 'Прочитай и ответь',
+        prompt: `<div class="chat reading">${d.lines.map((l) => `<div class="msg">${l.who ? `<span class="who">${esc(l.who)}</span>` : ''}<span class="ko">${esc(l.ko)}</span></div>`).join('')}</div>
+          <div class="row">${sayBtn(text)}<button type="button" class="link slow-say" data-say="${esc(text)}" data-slow="1">Медленнее</button></div><div class="q-ru sm">${esc(q.q)}</div>`,
+        options: shuffle([q.a, ...q.wrong]).map((x) => ({ text: x, ok: x === q.a })),
+        explain: at ? `<div class="ex-line"><span class="ko">${esc(at.ko)}</span>${sayBtn(at.ko, 'sm')}</div><div class="ex-ru">${esc(at.ru)}</div>` : '' };
     },
     'dialog-line'(it) {
       const d = it.dlg, line = d.lines[it.i];

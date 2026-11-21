@@ -40,7 +40,7 @@
         </div>
         ${st.n >= goal ? UI.stamp('참 잘했어요') : ''}
       </section>
-      ${path.fresh ? welcome() : ''}
+      ${path.fresh ? welcome() : backupCard()}
 
       <section class="stats">
         <div><b>${DB.entries.length}</b><span>слов и фраз</span></div>
@@ -66,6 +66,26 @@
         </div>
       </div>
     `;
+    const bk = root.querySelector('.backup');
+    if (bk) {
+      bk.querySelector('.hide-backup').addEventListener('click', () => { Store.setMeta('backupHide', Date.now() + 30 * DAY); bk.remove(); });
+      // браузер пообещал не стирать данные — напоминание не нужно
+      navigator.storage?.persisted?.().then((p) => { if (p) bk.remove(); }).catch(() => {});
+    }
+  }
+
+  // Напоминание сохранить прогресс: он живёт только в этом браузере, а Safari стирает данные сайта,
+  // который долго не открывали. Не показываем в установленном приложении и месяц после сохранения.
+  const DAY = 86400000;
+  const standalone = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+  function backupCard() {
+    const now = Date.now();
+    if (standalone() || Store.keys().length < 30 || (Store.meta('backupAt') || 0) > now - 30 * DAY || (Store.meta('backupHide') || 0) > now) return '';
+    return `<section class="card note backup">
+      <h3>Сохрани прогресс</h3>
+      <p class="sm">Прогресс хранится только в этом браузере и может пропасть, если долго не открывать сайт или очистить данные браузера. Поставь приложение на главный экран телефона или сохрани прогресс файлом или ссылкой.</p>
+      <div class="row"><a class="btn sm" href="#/settings">Сохранить</a><button class="btn sm ghost hide-backup" type="button">Напомнить через месяц</button></div>
+    </section>`;
   }
 
   // Первый запуск: с чего начать и где что лежит
@@ -171,7 +191,8 @@
       return `<div class="card"><h3>Что прошли</h3><ul class="topics">${l.topics.map((t) => `<li>${esc(t)}</li>`).join('')}</ul></div>
         ${l.notes?.length ? `<div class="card note"><h3>Запомнить</h3>${l.notes.map((n) => `<p>${esc(n)}</p>`).join('')}</div>` : ''}
         ${units.length ? `<div class="card"><h3>Хангыль в этом уроке</h3><div class="chips">${units.map((u) => `<span class="chip">${u.title}</span>`).join('')}</div><a class="link" href="#/hangul">Открыть таблицу хангыля →</a></div>` : ''}
-        <h2 class="h">Как тренировать</h2>${modeGrid([l.number])}`;
+        <h2 class="h">Как тренировать</h2>${modeGrid([l.number])}
+        <p class="muted xs report">Нашёл ошибку в уроке? <a class="link" href="https://github.com/AmadeusQ/korean/issues/new" target="_blank" rel="noopener">Напиши об этом</a>.</p>`;
     },
     words: (l) => `<div class="card list">${l.words.map(wordRow).join('')}</div>`,
     phrases: (l) => {
@@ -425,7 +446,7 @@
       </div>
       <div class="card form">
         <h3>Прогресс</h3>
-        <p class="sm muted">Прогресс хранится в этом браузере. Чтобы перенести его на другое устройство, сохрани файл и загрузи его там.</p>
+        <p class="sm muted">Прогресс хранится только в этом браузере. Сохраняй его иногда в файл: так он не пропадёт, если браузер очистит данные. Файл можно загрузить и на другом устройстве.</p>
         <div class="row"><button class="btn sm exp">Сохранить в файл</button><label class="btn sm ghost">Загрузить из файла<input type="file" accept=".json" class="imp" hidden></label><button class="btn sm danger rst">Сбросить</button></div>
       </div>
       <div class="card form">
@@ -434,6 +455,7 @@
         <div class="row"><button class="btn sm mk-link">Создать ссылку</button></div>
         <textarea class="xfer" readonly hidden></textarea>
       </div>
+      <div class="card"><h3>Нашёл ошибку?</h3><p class="sm">Неверный перевод, опечатка или задание работает не так — <a class="link" href="https://github.com/AmadeusQ/korean/issues/new" target="_blank" rel="noopener">напиши об этом</a>. Укажи урок и слово или фразу.</p></div>
       <div class="card"><h3>Как поставить на телефон</h3><p class="sm">Открой сайт на телефоне. В Chrome: меню ⋮ → «Добавить на главный экран». В Safari: «Поделиться» → «На экран „Домой“». Приложение откроется без браузерной рамки и будет работать без интернета.</p></div>`;
     root.querySelector('[data-k="theme"]').value = s.theme;
     root.querySelectorAll('[data-k]').forEach((el) => el.addEventListener('change', () => {
@@ -444,6 +466,7 @@
     root.querySelector('.exp').addEventListener('click', () => {
       const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([Store.exportJSON()], { type: 'application/json' }));
       a.download = `korean-progress-${new Date().toLocaleDateString('sv-SE')}.json`; a.click();
+      Store.setMeta('backupAt', Date.now());
     });
     root.querySelector('.imp').addEventListener('change', async (e) => {
       const f = e.target.files[0]; if (!f) return;
@@ -452,6 +475,7 @@
     root.querySelector('.mk-link').addEventListener('click', async () => {
       const url = `${location.origin}${location.pathname}#/import/${await Store.pack()}`;
       const ta = root.querySelector('.xfer'); ta.hidden = false; ta.value = url; ta.select();
+      Store.setMeta('backupAt', Date.now());
       if (navigator.share && matchMedia('(pointer: coarse)').matches) { navigator.share({ title: 'Мой корейский: прогресс', url }).catch(() => {}); return; }
       try { await navigator.clipboard.writeText(url); UI.toast('Ссылка скопирована'); } catch { UI.toast('Скопируй ссылку из поля'); }
     });

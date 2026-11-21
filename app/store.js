@@ -36,7 +36,7 @@
     return (Array.isArray(list) ? list : []).map((w) => w && ({ ko: str(w.ko, 60).trim(), ru: str(w.ru, 120).trim(), c: str(w.c, 40) || 'Мои слова', added: isDay(w.added) ? w.added : '' }))
       .filter((w) => w && w.ko && w.ru && /[가-힣]/.test(w.ko)).slice(0, 2000);
   }
-  function cleanMeta(meta) { const m = meta || {}; return { matchBest: num(m.matchBest) || undefined, timedBest: int(m.timedBest, 0, 1e4) || undefined }; }
+  function cleanMeta(meta) { const m = meta || {}; return { matchBest: num(m.matchBest) || undefined, timedBest: int(m.timedBest, 0, 1e4) || undefined, backupAt: num(m.backupAt) || undefined, backupHide: num(m.backupHide) || undefined }; }
   function cleanSettings(s) {
     const d = empty().settings, x = Object.assign({}, d, s || {});
     return { rate: Math.min(1.5, Math.max(0.5, num(x.rate) || d.rate)), dailyGoal: int(x.dailyGoal, 5, 300), romanize: !!x.romanize, typing: !!x.typing, keyboard: !!x.keyboard, theme: ['auto', 'light', 'dark'].includes(x.theme) ? x.theme : 'auto' };
