@@ -218,7 +218,8 @@
     tokens.forEach((t, i) => {
       const bare = t.replace(/[.,!?]/g, '');
       DB.entries.forEach((e) => {
-        if (e.kind !== 'word' || !bare.startsWith(e.ko) || [...e.ko].length < (bare === e.ko ? 1 : 2)) return;
+        // служебные слова не убираем: 마리 «штук» совпадало с именем Мари
+        if (e.kind !== 'word' || ['cnt', 'suf', 'num'].includes(e.t) || !bare.startsWith(e.ko) || [...e.ko].length < (bare === e.ko ? 1 : 2)) return;
         if (!best || e.ko.length > best.entry.ko.length) best = { entry: e, ti: i };
       });
     });
@@ -747,6 +748,7 @@
 
     // через сколько карточка вернётся при такой оценке (подписи на кнопках)
     function ivl(g) {
+      if (Store.get(q.item.key) && !Store.isDue(q.item.key)) return 'срок прежний';
       const b = Math.max(0, Store.box(q.item.key));
       const box = g === 1 ? Math.max(1, b) : Math.min(Store.MAX_BOX, b + (g === 3 ? 2 : 1));
       const days = [0, 1, 2, 4, 8, 16, 32][box] * (g === 1 ? 0.5 : 1);

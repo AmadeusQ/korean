@@ -62,6 +62,8 @@
   function answer(key, correct) {
     const now = Date.now();
     const it = state.items[key] || { box: 0, due: now, right: 0, wrong: 0 };
+    // верный ответ раньше срока коробку не двигает: иначе пять тренировок за вечер дают интервал в неделю
+    if (correct && it.due > now) { it.right++; it.last = now; state.items[key] = it; countDay(true); save(); return it; }
     if (correct) { it.right++; it.box = Math.min(MAX_BOX, it.box + 1); }
     else { it.wrong++; it.box = Math.max(0, it.box - 2); }
     it.due = now + INTERVALS[it.box];
@@ -77,6 +79,7 @@
     const now = Date.now();
     const it = state.items[key] || { box: 0, due: now, right: 0, wrong: 0 };
     if (g === 0) { it.wrong++; it.box = 0; it.due = now; }
+    else if (it.due > now) it.right++; // раньше срока: как в answer, коробка и срок не меняются
     else {
       it.right++;
       it.box = g === 1 ? Math.max(1, it.box) : Math.min(MAX_BOX, it.box + (g === 3 ? 2 : 1));
