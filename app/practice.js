@@ -325,10 +325,11 @@
       if (s.due <= now) return 2 + (Store.MAX_BOX - s.box) * 0.3 + Math.random();
       return Math.random() * 0.8;
     };
-    let ranked = pool.map((it) => ({ it, s: score(it) })).sort((a, b) => b.s - a.s).map((x) => x.it), late = [];
+    const scored = new Map(pool.map((it) => [it, score(it)]));
+    let ranked = pool.slice().sort((a, b) => scored.get(b) - scored.get(a)), late = [];
+    const isNew = (it) => it.group === 'words' && !Store.get(it.key);
+    const fresh = ranked.filter(isNew);
     if (newLeft < Infinity) {
-      const isNew = (it) => it.group === 'words' && !Store.get(it.key);
-      const fresh = ranked.filter(isNew);
       late = fresh.slice(newLeft);
       ranked = ranked.filter((it) => !late.includes(it));
     }
@@ -341,6 +342,17 @@
       for (const [g, q] of Object.entries(quotas)) out.push(...ranked.filter((it) => it.group === g).slice(0, Math.round(n * q)));
     }
     for (const it of [...ranked, ...late]) { if (out.length >= n) break; if (!out.includes(it)) out.push(it); }
+    // Повторение идёт первым, но не забирает всю сессию: до трети мест — новым словам (в пределах лимита на день).
+    // Иначе на следующий день вчерашние слова занимали все места, а новые не попадались вовсе.
+    const want = Math.min(Math.ceil(n * 0.3), newLeft, fresh.length - late.length);
+    const extra = fresh.filter((it) => !late.includes(it) && !out.includes(it));
+    for (let have = out.filter(isNew).length; have < want && extra.length; have++) {
+      // уступает место самое «неспешное» из уже выбранных не новых: сначала из слов, чтобы не ломать доли разделов
+      const old = out.filter((it) => !isNew(it)), sameGroup = old.filter((it) => it.group === 'words');
+      const drop = (sameGroup.length ? sameGroup : old).reduce((a, b) => (scored.get(a) <= scored.get(b) ? a : b), null);
+      if (!drop) break;
+      out[out.indexOf(drop)] = extra.shift();
+    }
     return shuffle(out.slice(0, n));
   }
 
