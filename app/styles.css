@@ -354,7 +354,7 @@ body.in-session .topbar { display: none; }
 .pair.sel { border-color: var(--accent); background: var(--accent); color: var(--on-accent); }
 .pair.done { opacity: .18; border-style: dashed; pointer-events: none; }
 .pair.miss { border-color: var(--red); background: var(--red-soft); animation: shake .3s; }
-.add-form { margin-top: 4px; } .add-form input { padding: 8px 10px; border: 1px solid var(--line); border-radius: var(--r); background: var(--paper); min-width: 0; width: 60%; }
+.add-form { margin-top: 4px; } .add-form input, .intro-form .in-name { padding: 8px 10px; border: 1px solid var(--line); border-radius: var(--r); background: var(--paper); min-width: 0; width: 60%; }
 
 /* карточка слова */
 .wrow[data-ko] { cursor: pointer; } .wrow[data-ko]:hover .w-ko .ko { color: var(--accent); }
@@ -423,6 +423,7 @@ textarea.xfer { width: 100%; margin-top: 10px; min-height: 70px; font: 12px/1.4 
 /* ---------- настройки ---------- */
 .form .field { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 10px 0; border-top: 1px solid var(--line-2); }
 .form .field:first-of-type { border-top: 0; }
+.intro-form .in-name { font-family: var(--ko); font-size: 17px; }
 .form input[type="checkbox"] { width: 20px; height: 20px; accent-color: var(--accent); }
 .form input[type="range"] { accent-color: var(--accent); width: 160px; }
 .form input[type="number"] { width: 90px; }

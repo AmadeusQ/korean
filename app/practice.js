@@ -559,7 +559,7 @@
       const d = it.dlg, f = it.fact, at = d.lines[f.at];
       const r = readPrompt(d);
       return { kind: 'choice', label: r.listen ? 'Послушай: верно или нет?' : 'Прочитай: верно или нет?', autoplay: r.listen ? r.text : undefined,
-        prompt: `${r.html}<div class="q-ko md">${esc(f.ko)}</div>${sayBtn(f.ko)}`,
+        prompt: `${r.html}<div class="hint">Верно ли по тексту:</div><div class="q-ko md">${esc(f.ko)}</div>${sayBtn(f.ko)}`,
         options: [{ text: 'Верно', ok: f.ok }, { text: 'Неверно', ok: !f.ok }],
         explain: `<div class="ex-ru">«${esc(f.ru)}» — ${f.ok ? 'верно' : 'неверно'}</div>${at ? `<div class="ex-line"><span class="ko">${esc(at.ko)}</span>${sayBtn(at.ko, 'sm')}</div><div class="ex-ru">${esc(at.ru)}</div>` : ''}` };
     },
@@ -595,7 +595,7 @@
       let order = shuffle(tokens.map((t, i) => i));
       if (tokens.length > 1 && order.every((x, i) => x === i)) order = order.reverse();
       return { kind: 'build', label: 'Собери фразу', prompt: `<div class="q-ru">${esc(l.ru)}</div>`, tokens, order, answer: l.ko, sayAfter: l.ko,
-        explain: `<div class="ex-line"><span class="ko">${esc(l.ko)}</span>${sayBtn(l.ko, 'sm')}</div>` };
+        explain: `<div class="ex-line"><span class="ko">${esc(l.ko)}</span>${sayBtn(l.ko, 'sm')}</div><div class="ex-ru">${esc(l.ru)}</div>` };
     },
   };
 
