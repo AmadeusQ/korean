@@ -425,7 +425,8 @@
     },
     'listen-word'(it) {
       const e = it.entry;
-      const ds = fillDistractors(e, lenNear(e), sameKind(e), 3, (x) => bare(x.ko));
+      // по звучанию: 입 и 잎 на слух одинаковы [입], обманкой друг к другу не годятся
+      const ds = fillDistractors(e, lenNear(e), sameKind(e), 3, (x) => H.pron(bare(x.ko)));
       return { kind: 'choice', label: 'Что прозвучало?', autoplay: e.ko,
         prompt: listenBtns(e.ko, 'Нажми, чтобы послушать ещё раз'),
         options: shuffle([e, ...ds]).map((x) => ({ text: bare(x.ko), ok: x === e, ko: true })), explain: entryExplain(e) };
@@ -453,7 +454,8 @@
       // «Перед тобой шапка. 책이에요?» — 아니요, 모자예요.
       const e = it.entry;
       // 학생 и 대학생 не противопоставляем: студент университета — тоже студент
-      const same = DB.entries.filter((x) => showable(x) && !x.ko.includes(e.ko) && !e.ko.includes(x.ko) && shortRu(x.ru) !== shortRu(e.ru) && (e.job ? x.job : !x.job && x.c === e.c));
+      const reach = Math.max(DB.path().current, e.lesson); // не спрашивать слова из уроков, до которых ещё не дошли
+      const same = DB.entries.filter((x) => showable(x) && x.lesson <= reach && !x.ko.includes(e.ko) && !e.ko.includes(x.ko) && shortRu(x.ru) !== shortRu(e.ru) && (e.job ? x.job : !x.job && x.c === e.c));
       const asked = same.length && Math.random() < 0.6 ? pick(same) : e;
       const yes = asked === e;
       const cop = (w) => w + H.copula(w), badCop = (w) => w + (H.copula(w) === '이에요' ? '예요' : '이에요');
@@ -698,9 +700,12 @@
     if (mode === 'match') return startMatch(root, nums, pool);
     const isTest = mode === 'test', isTimed = mode === 'timed';
     const TIME = 5 * 60 * 1000; const t0 = Date.now(); let timeUp = false, timer = null;
-    const newLeft = isTest || filtered ? Infinity : Math.max(0, Store.settings().newPerDay - Store.newToday());
+    // каждое новое слово сначала показывается карточкой, поэтому их не больше половины тренировки;
+    // в «5 минутах» карточек нет — новые слова туда идут, только если больше нечего
+    const left = Math.max(0, Store.settings().newPerDay - Store.newToday());
+    const newLeft = isTest || filtered ? Infinity : isTimed ? 0 : Math.min(left, Math.ceil(Store.settings().sessionLen / 2));
     const queue = mode === 'dialog' ? dialogQueue(nums) : choose(pool, isTest ? TEST_LEN : isTimed ? 80 : filtered ? Math.min(pool.length, FILTER_LEN) : Store.settings().sessionLen, isTimed ? 'mix' : mode, newLeft);
-    const introduced = new Set(); let introCount = 0;
+    const introduced = new Set();
     const introOk = !['cards', 'test', 'mistakes', 'timed'].includes(mode);
     const retried = new Set(), stored = new Set();
     const qid = (it) => it.uid || it.key; // у чисел один ключ хранилища на диапазон, но вопросы в сессии разные
@@ -755,8 +760,8 @@
     function renderIntro(it) {
       const e = it.entry;
       // пример из уроков, где слово уже встретилось (свои слова — из любых)
-      const upTo = Math.max(...e.lessons) || Infinity;
-      const ex = sentenceLines(DB.allNums().filter((n) => n > 0 && n <= upTo)).find((l) => l.ko.split(/\s+/).some((t) => t.startsWith(e.ko)) && l.ko !== e.ko);
+      const upTo = Math.min(...e.lessons.filter((n) => n > 0)); // урок, где слово появилось впервые (у своих слов — Infinity)
+      const ex = sentenceLines(DB.allNums().filter((n) => n > 0 && n <= upTo)).find((l) => l.ko !== e.ko && DB.inSentence(e.ko, l.ko));
       $body.innerHTML = `<div class="q-label">Новое слово</div><div class="q-prompt intro">${UI.pic(e.ko, 'lg')}${UI.cells(e.ko, 'big')}${sayBtn(e.ko)}
         ${UI.rr(e.ko)}<div class="q-ru">${esc(e.ru)}</div>${UI.note(e.ko)}
         ${ex ? `<div class="intro-ex"><span class="ko">${esc(ex.ko)}</span><span class="muted sm">${esc(ex.ru)}</span></div>` : ''}</div>`;
@@ -798,8 +803,8 @@
       if (idx >= queue.length || timeUp) return finish();
       const it = queue[idx];
       if (!ruleShown && it.group === 'numbers' && introOk && numFresh()) { progress(); return renderRule(Numbers.RULE); }
-      if (introOk && it.entry && it.group === 'words' && !Store.get(it.key) && !introduced.has(it.key) && introCount < 5) {
-        introduced.add(it.key); introCount++;
+      if (introOk && it.entry && it.group === 'words' && !Store.get(it.key) && !introduced.has(it.key)) {
+        introduced.add(it.key);
         queue.splice(Math.min(queue.length, idx + 3), 0, it); // проверим через пару вопросов
         progress(); $foot.className = 's-foot'; return renderIntro(it);
       }
@@ -903,7 +908,8 @@
           if (!alive) return;
           const alts = [...ev.results[0]].map((a) => a.transcript.trim());
           const target = norm(q.answer);
-          const ok = alts.some((a) => norm(a) === target || norm(a).includes(target) || (q.fuzzy && similar(norm(a), target) >= 0.75));
+          // подстрока — только для целей от двух слогов: иначе 이 засчитывался бы в 아이 и 오이
+          const ok = alts.some((a) => norm(a) === target || ([...target].length >= 2 && norm(a).includes(target)) || (q.fuzzy && similar(norm(a), target) >= 0.75));
           tries++;
           // из вариантов распознавания берём самый близкий к ответу и показываем, какие слоги не совпали
           const best = alts.slice().sort((a, b) => similar(norm(b), target) - similar(norm(a), target))[0] || '';
@@ -962,7 +968,8 @@
     let lastRec = null; // что сделал последний ответ: для отмены «Я промахнулся»
     function record(ok, g) {
       // верный ответ на тот же диапазон чисел в одной сессии не двигает коробку второй раз
-      if (g !== undefined) Store.grade(q.item.key, g); else if (ok && q.item.uid && stored.has(q.item.key)) Store.tally(true); else Store.answer(q.item.key, ok);
+      // после «Я промахнулся» верный вариант уже был подсвечен: ответ идёт в счёт дня, но коробку не двигает
+      if (g !== undefined) Store.grade(q.item.key, g); else if (ok && ((q.item.uid && stored.has(q.item.key)) || q.undone)) Store.tally(true); else Store.answer(q.item.key, ok);
       lastRec = { hadStored: stored.has(q.item.key), requeued: false };
       stored.add(q.item.key);
       marks[idx] = ok;
@@ -988,7 +995,7 @@
       $foot.className = 's-foot show ' + (ok ? 'ok' : 'bad');
       $foot.innerHTML = `<div class="fb"><div class="fb-title">${ok ? pick(['맞아요', '좋아요', '잘했어요']) + ' <small>верно</small>' : '틀렸어요 <small>правильный ответ</small>'}</div>
         <div class="fb-ex">${q.explain || ''}</div></div><button class="btn wide next">Дальше</button>
-        ${!ok && q.kind === 'choice' && !q.undone && !isTimed ? '<button type="button" class="link undo-miss">Я промахнулся, ответить ещё раз</button>' : ''}`;
+        ${!ok && q.kind === 'choice' && !q.undone && !isTimed && !isTest ? '<button type="button" class="link undo-miss">Я промахнулся, ответить ещё раз</button>' : ''}`;
       const nb = $foot.querySelector('.next');
       const tok = idx; const go = () => step(undefined, tok);
       $foot.querySelector('.undo-miss')?.addEventListener('click', () => undoMiss(tok));
@@ -1039,7 +1046,8 @@
   // ---------- «Найди пары»: 3 раунда по 6 пар на время ----------
   function startMatch(root, nums, pool) {
     const ROUNDS = 3, PAIRS = 6;
-    const items = uniqBy(choose(uniqBy(pool, (it) => it.entry.ru), ROUNDS * PAIRS, 'words'), (it) => it.entry.ru);
+    // в игре нет карточки «Новое слово»: незнакомые слова берём, только если знакомых не хватает
+    const items = uniqBy(choose(uniqBy(pool, (it) => it.entry.ru), ROUNDS * PAIRS, 'words', 0), (it) => it.entry.ru);
     if (items.length < PAIRS) { root.innerHTML = '<section class="empty">Слишком мало слов для игры.<br><a class="btn" href="#/practice">Назад</a></section>'; return; }
     const t0 = Date.now(); let round = 0, misses = 0, timer = null, alive = true; const missed = new Set();
     document.body.classList.add('in-session');

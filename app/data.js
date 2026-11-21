@@ -11,6 +11,9 @@
     });
   }
 
+  const ENDINGS = new Set(['', '은', '는', '이', '가', '을', '를', '의', '도', '에', '에서', '에게', '한테', '하고', '이랑', '랑', '과', '와', '만', '로', '으로', '요', '이요',
+    '이에요', '예요', '이에요?', '예요?', '이세요', '세요', '입니다', '입니까', '이야', '야', '이고', '고', '이지만', '지만', '씨', '씨는', '씨가', '씨도', '씨예요', '씨의']);
+
   const DB = {
     lessons, entries: [], byKo: new Map(),
     async load() {
@@ -77,7 +80,9 @@
     // Путь по урокам: текущий — последний начатый (новичку первый), следующий — когда текущий освоен
     path() {
       const nums = lessons.map((l) => l.number);
-      const started = nums.filter((n) => Store.getTest(n) || DB.lessonKeys(n).some((k) => Store.get(k)));
+      // своё слово, которое есть и в позднем уроке (학생 из урока 4), этот урок не начинает
+      const mine = new Set(DB.entries.filter((e) => e.mine).map((e) => e.key));
+      const started = nums.filter((n) => Store.getTest(n) || DB.lessonKeys(n).some((k) => !mine.has(k) && Store.get(k)));
       const current = started.length ? Math.max(...started) : nums[0];
       const next = DB.passed(current) ? nums[nums.indexOf(current) + 1] ?? null : null;
       return { current, next, fresh: !started.length };
@@ -86,6 +91,18 @@
     openNums() {
       const { current } = DB.path();
       return [...lessons.filter((l) => l.number <= current).map((l) => l.number), ...(Store.custom().length ? [0] : [])];
+    },
+    // Слово встречается в предложении: целым словом или с частицей/связкой (이 «два» не находится в 이름이 뭐예요?)
+    inSentence(ko, sentence) {
+      const toks = sentence.replace(/[.,!?…«»"]/g, ' ').split(/\s+/).filter(Boolean), w = ko.replace(/[.,!?]/g, '').split(/\s+/).filter(Boolean);
+      if (!w.length) return false;
+      const last = w[w.length - 1];
+      for (let i = 0; i + w.length <= toks.length; i++) {
+        if (!w.slice(0, -1).every((x, k) => toks[i + k] === x)) continue;
+        const t = toks[i + w.length - 1];
+        if (t.startsWith(last) && ENDINGS.has(t.slice(last.length))) return true;
+      }
+      return false;
     },
     categories: () => [...new Set(DB.entries.map((e) => e.c))].sort((a, b) => a.localeCompare(b, 'ru')),
   };

@@ -59,7 +59,9 @@
 
   // Подключить к полю ввода. onEnter вызывается по кнопке «готово». visual=false — только физическая клавиатура.
   function attach(host, input, onEnter, visual = true) {
-    let seq = toSeq(input.value), shift = false;
+    let seq = toSeq(input.value), shift = false, own = false;
+    // своё изменение значения: обычное событие input (форма его слышит), но свой обработчик ниже его пропускает
+    const changed = () => { own = true; input.dispatchEvent(new Event('input', { bubbles: true })); own = false; };
     input.addEventListener('keydown', (e) => {
       if (e.isComposing || e.ctrlKey || e.metaKey || e.altKey) return;
       if (/[ㄱ-ㆎ가-힣]/.test(e.key) || e.key === 'Process') return; // уже стоит корейская раскладка
@@ -74,7 +76,7 @@
       const left = assemble(head);
       input.value = left + tail; seq = toSeq(input.value);
       input.setSelectionRange(left.length, left.length);
-      input.dispatchEvent(new Event('kbinput'));
+      changed();
     });
     const kb = document.createElement('div'); kb.className = 'kb';
     const draw = () => {
@@ -86,7 +88,7 @@
       }).join('')}</div>`).join('') +
         `<div class="kb-row"><button type="button" class="kb-k space" data-k=" ">пробел</button><button type="button" class="kb-k enter" data-k="enter">Проверить</button></div>`;
     };
-    const sync = () => { input.value = assemble(seq); input.dispatchEvent(new Event('kbinput')); };
+    const sync = () => { input.value = assemble(seq); changed(); };
     kb.addEventListener('pointerdown', (e) => e.preventDefault()); // не забирать фокус
     kb.addEventListener('click', (e) => {
       const b = e.target.closest('[data-k]'); if (!b || input.disabled) return;
@@ -98,7 +100,7 @@
       sync();
     });
     // если печатают с обычной клавиатуры — подхватить
-    input.addEventListener('input', () => { seq = toSeq(input.value); });
+    input.addEventListener('input', () => { if (!own) seq = toSeq(input.value); });
     if (!visual) return null;
     draw(); host.appendChild(kb);
     return kb;

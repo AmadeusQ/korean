@@ -393,7 +393,7 @@ body.in-session .topbar { display: none; }
 .mic { width: 96px; height: 96px; border-radius: 50%; border: 1px solid var(--ink); background: var(--sheet); color: var(--ink); display: grid; place-items: center; }
 .mic .ic { width: 38px; height: 38px; }
 .mic.on { background: var(--accent); border-color: var(--accent); color: var(--on-accent); animation: pulse 1.2s infinite; }
-@keyframes pulse { 50% { box-shadow: 0 0 0 12px color-mix(in srgb, var(--accent) 15%, transparent); } }
+@keyframes pulse { 0% { outline: 2px solid var(--accent); outline-offset: 0; } 100% { outline: 2px solid transparent; outline-offset: 12px; } }
 .heard .ko { font-size: 18px; color: var(--ink); }
 /* ролевой диалог */
 .chat { width: 100%; max-width: 440px; display: flex; flex-direction: column; gap: 8px; text-align: left; }
@@ -467,5 +467,5 @@ details { margin: 8px 0; font-size: 14px; } summary { cursor: pointer; color: va
 .ex-note .muted { display: block; }
 .note-field { display: flex; flex-direction: column; gap: 4px; margin: 12px 0; }
 .note-field textarea { font: inherit; font-size: 15px; padding: 8px 10px; border: 1px solid var(--line); border-radius: var(--r); background: var(--paper); color: inherit; resize: vertical; }
-.hard { color: var(--red); font-weight: 500; }
+.hard { color: var(--accent-2); font-weight: 600; } /* красный только для ошибок и печатей */
 .only-hard.on { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }

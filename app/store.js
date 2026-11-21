@@ -12,10 +12,13 @@
   const num = (v) => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
   const str = (v, max = 200) => (typeof v === 'string' ? v.slice(0, max) : '');
   const isDay = (d) => /^\d{4}-\d{2}-\d{2}$/.test(d);
+  const BAD_KEY = new Set(['__proto__', 'constructor', 'prototype']);
+  // пределы: реальный прогресс намного меньше, а чужая ссылка не должна забить localStorage
+  const MAX_ITEMS = 20000, MAX_DAYS = 3700;
   function cleanItems(items) {
     const out = {};
-    for (const [k, it] of Object.entries(items || {})) {
-      if (typeof k !== 'string' || k.length > 300 || !it || typeof it !== 'object') continue;
+    for (const [k, it] of Object.entries(items || {}).slice(0, MAX_ITEMS)) {
+      if (typeof k !== 'string' || k.length > 300 || BAD_KEY.has(k) || !it || typeof it !== 'object') continue;
       if (/^num:[sn]:\d+$/.test(k)) continue; // старый формат чисел: ключ на каждое число
       // время ответа из будущего не должно навсегда перебивать местный прогресс
       out[k] = { box: int(it.box, 0, MAX_BOX), due: Math.min(num(it.due), Date.now() + 33 * DAY), right: int(it.right, 0, 1e6), wrong: int(it.wrong, 0, 1e6), last: Math.min(num(it.last), Date.now() + DAY) };
@@ -24,7 +27,7 @@
   }
   function cleanDays(days) {
     const out = {};
-    for (const [d, v] of Object.entries(days || {})) if (isDay(d) && v && typeof v === 'object') out[d] = { n: int(v.n, 0, 1e5), ok: int(v.ok, 0, 1e5), nw: int(v.nw, 0, 1e5) };
+    for (const [d, v] of Object.entries(days || {}).filter(([d]) => isDay(d)).sort(([a], [b]) => (a < b ? 1 : -1)).slice(0, MAX_DAYS)) if (isDay(d) && v && typeof v === 'object') out[d] = { n: int(v.n, 0, 1e5), ok: int(v.ok, 0, 1e5), nw: int(v.nw, 0, 1e5) };
     return out;
   }
   function cleanTests(tests) {
@@ -45,7 +48,9 @@
     for (const [k, v] of Object.entries(notes || {}).slice(0, 3000)) { const t = str(v, 200).trim(); if (k.length <= 60 && /[가-힣]/.test(k) && t) out[k] = t; }
     return out;
   }
-  function cleanMeta(meta) { const m = meta || {}; return { matchBest: num(m.matchBest) || undefined, timedBest: int(m.timedBest, 0, 1e4) || undefined, backupAt: num(m.backupAt) || undefined, backupHide: num(m.backupHide) || undefined, intro: cleanIntro(m.intro) }; }
+  // рекорд «Найди пары» в мс: быстрее 3 секунд не бывает, а время из будущего не должно навсегда скрыть напоминание о копии
+  const time = (v) => Math.min(num(v), Date.now() + 31 * DAY) || undefined;
+  function cleanMeta(meta) { const m = meta || {}; return { matchBest: num(m.matchBest) ? int(m.matchBest, 3000, 36e5) : undefined, timedBest: int(m.timedBest, 0, 1e4) || undefined, backupAt: time(m.backupAt), backupHide: time(m.backupHide), intro: cleanIntro(m.intro) }; }
   function cleanSettings(s) {
     const d = empty().settings, x = Object.assign({}, d, s || {});
     return { rate: Math.min(1.5, Math.max(0.5, num(x.rate) || d.rate)), dailyGoal: int(x.dailyGoal, 5, 300), newPerDay: int(x.newPerDay, 3, 100), sessionLen: [10, 15, 25].includes(+x.sessionLen) ? +x.sessionLen : 15, romanize: !!x.romanize, typing: !!x.typing, keyboard: !!x.keyboard, theme: ['auto', 'light', 'dark'].includes(x.theme) ? x.theme : 'auto' };
@@ -55,7 +60,11 @@
   let state;
   try { state = clean(JSON.parse(localStorage.getItem(KEY) || '{}')); } catch { state = empty(); }
 
-  const save = () => { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch {} };
+  let saveWarned = false;
+  const save = () => {
+    try { localStorage.setItem(KEY, JSON.stringify(state)); }
+    catch { if (!saveWarned) { saveWarned = true; window.UI?.toast?.('Прогресс не сохраняется: в браузере закончилось место или запрещено хранение'); } }
+  };
   const today = () => new Date().toLocaleDateString('sv-SE'); // YYYY-MM-DD в местном времени
 
   function get(key) { return state.items[key]; }
@@ -169,6 +178,8 @@
       for (const [n, t] of Object.entries(other.tests)) { const m = state.tests[n]; if (!m || t.best > m.best) state.tests[n] = t; }
       for (const w of other.custom) if (!state.custom.some((x) => x.ko === w.ko)) state.custom.push(w);
       for (const [k, v] of Object.entries(other.notes)) if (!state.notes[k]) state.notes[k] = v;
+      if (other.meta.intro?.name && !state.meta?.intro?.name) { state.meta = state.meta || {}; state.meta.intro = other.meta.intro; }
+      state = clean(state); // общие пределы (число своих слов, подсказок) и после объединения
       // рекорды: в «Найди пары» лучше меньшее время, в «5 минутах» — больше ответов
       const om = other.meta; state.meta = state.meta || {};
       if (om.matchBest && (!state.meta.matchBest || om.matchBest < state.meta.matchBest)) state.meta.matchBest = om.matchBest;
@@ -178,16 +189,28 @@
     keys: () => Object.keys(state.items),
     // Компактная строка для ссылки переноса (без настроек)
     async pack() {
-      const json = JSON.stringify({ items: state.items, days: state.days, tests: state.tests || {}, custom: state.custom || [], notes: state.notes || {}, meta: { matchBest: state.meta?.matchBest, timedBest: state.meta?.timedBest } });
+      const json = JSON.stringify({ items: state.items, days: state.days, tests: state.tests || {}, custom: state.custom || [], notes: state.notes || {}, meta: { matchBest: state.meta?.matchBest, timedBest: state.meta?.timedBest, intro: state.meta?.intro } });
       let bytes = new TextEncoder().encode(json), z = '0';
       if (window.CompressionStream) { bytes = new Uint8Array(await new Response(new Blob([bytes]).stream().pipeThrough(new CompressionStream('gzip'))).arrayBuffer()); z = '1'; }
       let bin = ''; bytes.forEach((b) => (bin += String.fromCharCode(b)));
       return z + btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
     },
     async unpack(str) {
+      const LIMIT = 4e6; // настоящий прогресс — десятки КБ; больше — испорченная или подделанная ссылка
+      if (str.length > LIMIT) throw new Error('Слишком длинная ссылка');
       const z = str[0], b64 = str.slice(1).replace(/-/g, '+').replace(/_/g, '/');
       let bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
-      if (z === '1') bytes = new Uint8Array(await new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'))).arrayBuffer());
+      if (z === '1') {
+        // распаковка по кускам с отсечкой: маленькая ссылка не должна развернуться в гигабайты
+        const reader = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip')).getReader();
+        const parts = []; let size = 0;
+        for (;;) {
+          const { done, value } = await reader.read(); if (done) break;
+          size += value.length; if (size > LIMIT) { reader.cancel(); throw new Error('Слишком большой прогресс'); }
+          parts.push(value);
+        }
+        bytes = new Uint8Array(size); let o = 0; parts.forEach((p) => { bytes.set(p, o); o += p.length; });
+      }
       return JSON.parse(new TextDecoder().decode(bytes));
     },
     reset() { state = empty(); save(); },

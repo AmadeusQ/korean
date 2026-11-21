@@ -1,7 +1,7 @@
 // Офлайн-режим. Свои файлы: сначала сеть (новые уроки появляются сразу), но не дольше 4 секунд —
 // на слабой связи отдаём из кэша. Шрифты Google: из кэша, они не меняются.
-const CACHE = 'korean-v10';
-const SHELL = ['./', './index.html', './app/styles.css', './data/index.js', './data/pictures.js', './manifest.webmanifest', './icon.svg', './icon-192.png',
+const CACHE = 'korean-v11';
+const SHELL = ['./', './index.html', './app/styles.css', './data/index.js', './data/pictures.js', './manifest.webmanifest', './icon.svg', './icon-192.png', './icon-180.png', './icon-512.png', './icon-maskable-512.png',
   ...['hangul', 'store', 'tts', 'ui', 'keyboard', 'numbers', 'data', 'practice', 'views', 'main'].map((f) => `./app/${f}.js`)];
 // уроки перечислены в data/index.js: берём их id оттуда, чтобы приложение открывалось без сети уже после первого визита
 async function precache() {
@@ -17,7 +17,8 @@ self.addEventListener('install', (e) => {
   e.waitUntil(precache().catch(() => {}).then(() => self.skipWaiting()));
 });
 self.addEventListener('activate', (e) => {
-  e.waitUntil(caches.keys().then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)))).then(() => self.clients.claim()));
+  // только свои старые кэши: на github.io у соседних сайтов того же владельца общий origin
+  e.waitUntil(caches.keys().then((keys) => Promise.all(keys.filter((k) => k.startsWith('korean-') && k !== CACHE).map((k) => caches.delete(k)))).then(() => self.clients.claim()));
 });
 
 self.addEventListener('fetch', (e) => {

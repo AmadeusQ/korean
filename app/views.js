@@ -135,7 +135,7 @@
         const m = Math.round(avgMastery(DB.lessonKeys(l.number)) * 100);
         return `<a class="lesson" href="#/lesson/${l.number}">
           <span class="kicker serif">제${l.number}과</span>
-          <span class="l-body"><b>${esc(l.title)}</b><span class="muted sm">${esc(l.topics.map((t) => t.split(':')[0]).join(' · '))}</span>
+          <span class="l-body"><b>${esc(l.title)}</b><span class="muted sm">${esc([...new Set(l.topics.map((t) => t.split(':')[0]))].join(' · '))}</span>
             <span class="muted xs">${plural(keys.length, 'новое слово или фраза', 'новых слова и фразы', 'новых слов и фраз')}${Store.getTest(l.number) ? ` · контрольная ${Store.getTest(l.number).best}%` : ''}</span></span>
           <span class="l-prog"><span class="pbar"><i style="width:${m}%"></i></span><span class="xs muted">${m}%</span></span>
         </a>`;
@@ -163,6 +163,7 @@
     const body = root.querySelector('.tab-body');
     const show = (k) => {
       root.querySelectorAll('.tab').forEach((b) => b.classList.toggle('on', b.dataset.tab === k));
+      TTS.stop(); body.classList.remove('no-ru'); // озвучка и «Скрыть перевод» относятся к прежней вкладке
       body.innerHTML = TAB[k](l, photos);
       if (k === 'photos') body.querySelectorAll('[data-photo]').forEach((a) => a.addEventListener('click', (e) => { e.preventDefault(); lightbox(photos, +a.dataset.photo); }));
       if (k === 'dialogues') {
@@ -235,7 +236,7 @@
     const draw = () => { box.innerHTML = `<img src="${photos[i]}" alt=""><button class="lb-prev" aria-label="Назад">‹</button><button class="lb-next" aria-label="Вперёд">›</button><button class="lb-close" aria-label="Закрыть">${icon('close')}</button><span class="lb-n">${i + 1} / ${photos.length}</span>`; };
     const go = (d) => { i = (i + d + photos.length) % photos.length; draw(); };
     const close = () => { box.remove(); document.removeEventListener('keydown', key); };
-    const key = (e) => { if (e.key === 'Escape') close(); if (e.key === 'ArrowLeft') go(-1); if (e.key === 'ArrowRight') go(1); };
+    const key = (e) => { if (!box.isConnected) return close(); if (e.key === 'Escape') close(); if (e.key === 'ArrowLeft') go(-1); if (e.key === 'ArrowRight') go(1); };
     box.addEventListener('click', (e) => {
       if (e.target.closest('.lb-prev')) go(-1); else if (e.target.closest('.lb-next')) go(1); else if (e.target.closest('.lb-close') || e.target === box) close();
     });
@@ -249,10 +250,12 @@
   // Карточка слова: нажатие на строку в словаре или в уроке
   function wordSheet(e) {
     const s = Store.get(e.key);
+    // 이 «два» не должно находить фразы, где на этом месте 이 사람 «этот человек»
+    const longer = DB.entries.filter((x) => x.ko.startsWith(e.ko + ' '));
     const lines = [
       ...DB.dialogues(allNums()).flatMap((d) => d.lines), ...DB.grammar(allNums()).flatMap((g) => g.examples),
       ...DB.entries.filter((x) => x.kind === 'phrase'),
-    ].filter((l) => l.ko !== e.ko && l.ko.split(/\s+/).some((t) => t.replace(/[.,!?]/g, '').startsWith(e.ko)));
+    ].filter((l) => l.ko !== e.ko && DB.inSentence(e.ko, l.ko) && !longer.some((x) => DB.inSentence(x.ko, l.ko)));
     const ex = UI.uniqBy(lines, (l) => l.ko).slice(0, 5);
     document.querySelectorAll('.sheet-wrap').forEach((x) => x.remove());
     const box = document.createElement('div'); box.className = 'sheet-wrap';
@@ -269,7 +272,7 @@
       ${ex.length ? `<h2 class="h">Встречается во фразах</h2>${ex.map((l) => `<div class="exm"><div><span class="ko">${esc(l.ko)}</span><div class="muted sm">${esc(l.ru)}</div></div>${sayBtn(l.ko, 'sm')}</div>`).join('')}` : ''}
     </div>`;
     const close = () => { box.remove(); document.removeEventListener('keydown', key); };
-    const key = (ev) => { if (ev.key === 'Escape') close(); };
+    const key = (ev) => { if (!box.isConnected) return close(); if (ev.key === 'Escape') close(); };
     box.querySelector('.note-in').addEventListener('input', (ev) => Store.setNote(e.ko, ev.target.value));
     box.querySelector('.del-word')?.addEventListener('click', () => {
       if (!confirm(`Удалить «${e.ko}» из своих слов?`)) return;
@@ -295,7 +298,8 @@
       ${g.body.map((p) => `<p>${p}</p>`).join('')}
       <div class="examples">${g.examples.map((x) => `<div class="exm"><div><span class="ko">${esc(x.ko)}</span><div class="muted sm">${esc(x.ru)}</div></div>${sayBtn(x.ko, 'sm')}</div>`).join('')}</div></div>`;
     const close = () => { box.remove(); document.removeEventListener('keydown', key, true); };
-    const key = (ev) => { if (ev.key === 'Escape') { ev.stopPropagation(); close(); } };
+    // окно могли убрать без close() (переход по ссылке, новое окно): тогда обработчик просто снимается и Escape не глотает
+    const key = (ev) => { if (!box.isConnected) return close(); if (ev.key === 'Escape') { ev.stopPropagation(); close(); } };
     box.addEventListener('click', (ev) => { if (ev.target === box || ev.target.closest('.sheet-x')) close(); });
     document.addEventListener('keydown', key, true);
     document.body.appendChild(box);
@@ -346,7 +350,7 @@
       const row = (e) => `<div class="wrow" data-ko="${esc(e.ko)}"><div class="w-ko"><span class="ko serif">${esc(e.ko)}</span>${UI.rr(e.ko)}</div>
         <div class="w-ru">${esc(e.ru)}<div class="w-meta">${Store.isHard(e.key) ? '<b class="hard">трудное</b> · ' : ''}${esc(e.c)} · ${e.lessons.map((n) => (n === 0 ? 'мои' : `제${n}과`)).join(', ')}</div></div><span class="wpic">${UI.pic(e.ko)}</span>${strength(e.key)}${sayBtn(e.ko, 'sm')}</div>`;
       const groupOf = dictState.sort === 'abc' ? (e) => { const d = H.decompose(e.ko[0]); return d ? d.cho : e.ko[0]; }
-        : dictState.sort === 'lesson' ? (e) => lessonName(e.lesson) : null;
+        : dictState.sort === 'lesson' && dictState.lesson === 'all' ? (e) => lessonName(e.lesson) : null; // при выбранном уроке заголовок один и не нужен
       if (dictState.sort === 'lesson') list = list.slice().sort((a, b) => a.lesson - b.lesson);
       let html = '', prev = null;
       for (const e of list) { const g = groupOf && groupOf(e); if (g && g !== prev) { html += `<div class="dgroup serif">${esc(g)}</div>`; prev = g; } html += row(e); }

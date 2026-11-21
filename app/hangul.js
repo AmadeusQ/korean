@@ -76,8 +76,10 @@
       if (!d.jong) continue;
       const n = typeof s[i + 1] === 'object' ? s[i + 1] : null;
       const [stay, move] = SPLIT[d.jong] || ['', d.jong];
-      // числа: 육 после патчима получает ㄴ — 십육 [심뉵], 백육 [뱅뉵]
-      if (n && n.cho === 'ㅇ' && n.jung === 'ㅠ' && n.jong === 'ㄱ' && ['십', '백', '천', '만'].includes(w[i]) && !s[i + 2]) n.cho = 'ㄴ'; // 근육 [그뉵] не задеваем
+      // числа: 육 после патчима получает ㄴ — 십육 [심뉵], 백육십 [뱅뉵씹]
+      if (n && n.cho === 'ㅇ' && n.jung === 'ㅠ' && n.jong === 'ㄱ' && ['십', '백', '천', '만'].includes(w[i]) && (!s[i + 2] || '십백천만'.includes(w[i + 2]))) n.cho = 'ㄴ'; // 근육 [그뉵] не задеваем
+      // 열여섯, 열여덟: вставка ㄴ, которая после ㄹ звучит как ㄹ — [열려섣]
+      if (n && w[i] === '열' && /^여(섯|덟)/.test(w.slice(i + 1))) { n.cho = 'ㄹ'; continue; }
       if (n && n.cho === 'ㅇ') {
         if (d.jong === 'ㅇ') continue;
         if (move === 'ㅎ') { d.jong = ''; if (stay) n.cho = stay; continue; } // 좋아요 → 조아요, 많아요 → 마나요
@@ -90,7 +92,7 @@
         if (n.cho === 'ㅅ') { n.cho = 'ㅆ'; d.jong = stay; continue; }
         if (n.cho === 'ㄴ') { d.jong = stay || 'ㄴ'; if (d.jong === 'ㄹ') n.cho = 'ㄹ'; continue; }
       }
-      const snd = JONG_SOUND[d.jong];
+      const snd = JONG_SOUND[d.jong], orig = d.jong;
       if (n && n.cho === 'ㅎ' && ASPIR[snd]) { n.cho = ASPIR[snd]; d.jong = stay && stay !== snd ? stay : ''; continue; } // 축하 → 추카
       d.jong = snd;
       if (!n) continue;
@@ -99,7 +101,7 @@
         if (snd === 'ㄴ') d.jong = 'ㄹ'; // 신라 → 실라
         else if (snd !== 'ㄹ') { n.cho = 'ㄴ'; if (NASAL[snd]) d.jong = NASAL[snd]; } // 정류장 → 정뉴장, 독립 → 동닙
       } else if (snd === 'ㄹ' && n.cho === 'ㄴ') n.cho = 'ㄹ'; // 설날 → 설랄
-      else if (NASAL[snd] && TENSE[n.cho]) n.cho = TENSE[n.cho]; // 학생 → 학쌩
+      else if ((NASAL[snd] || ['ㄵ', 'ㄻ', 'ㄼ', 'ㄾ'].includes(orig)) && TENSE[n.cho]) n.cho = TENSE[n.cho]; // 학생 → 학쌩, 앉다 → 안따, 넓다 → 널따
     }
     return s.map((d) => (typeof d === 'string' ? d : compose(d.cho, d.jung, d.jong))).join('');
   }

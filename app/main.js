@@ -3,7 +3,7 @@
   const view = document.getElementById('view');
 
   function route() {
-    Practice.cleanup();
+    Practice.cleanup(); TTS.stop(); // в том числе диалог, который читается по репликам
     document.querySelectorAll('.sheet-wrap, .lightbox').forEach((x) => x.remove());
     const [path, query] = (location.hash.slice(1) || '/').split('?');
     const params = new URLSearchParams(query || '');

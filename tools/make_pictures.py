@@ -22,9 +22,9 @@ PICTURES = {
     '밥': 'tabler:bowl-chopsticks',
     # вещи
     '시계': 'watch', '의자': 'armchair', '공': 'volleyball', '돈': 'banknote', '책': 'book', '공책': 'notebook',
-    '책상': 'lamp-desk', '가방': 'shopping-bag', '옷': 'shirt', '티셔츠': 'shirt', '차': 'car', '기차': 'train-front',
+    '책상': 'lamp-desk', '가방': 'shopping-bag', '옷': 'shirt', '티셔츠': 'shirt', '기차': 'train-front',
     '약': 'pill', '문': 'door-closed', '수저': 'utensils', '메모': 'sticky-note', '가위': 'scissors', '도끼': 'axe',
-    '유리': 'glass-water', '라디오': 'radio', '드라마': 'tv', '탈': 'drama', '노래': 'music', '수학': 'calculator',
+    '라디오': 'radio', '드라마': 'tv', '탈': 'drama', '노래': 'music', '수학': 'calculator',
     '병': 'tabler:bottle', '구두': 'tabler:shoe', '휴지': 'tabler:toilet-paper', '야구': 'tabler:ball-baseball',
     '바지': 'phosphor:pants', '모자': 'phosphor:baseball-cap',
     # места
@@ -34,8 +34,8 @@ PICTURES = {
     '산': 'mountain', '나무': 'tree-deciduous', '숲': 'trees', '꽃': 'flower', '잎': 'leaf', '불': 'flame',
     '봄': 'sprout', '달': 'moon', '별': 'star', '낮': 'sun', '바다': 'waves', '휴가': 'plane',
     # тело, люди, животные
-    '눈': 'eye', '손': 'hand', '아이': 'baby', '친구': 'handshake', '토끼': 'rabbit',
-    '돼지': 'tabler:pig', '말': 'tabler:horse', '거미': 'tabler:spider', '소': 'phosphor:cow',
+    '손': 'hand', '아이': 'baby', '친구': 'handshake', '토끼': 'rabbit',
+    '돼지': 'tabler:pig', '거미': 'tabler:spider', '소': 'phosphor:cow',
     # профессии
     '가수': 'mic', '배우': 'clapperboard', '화가': 'palette', '기자': 'newspaper', '회사원': 'briefcase',
     '대학생': 'graduation-cap', '학생': 'backpack', '의사': 'stethoscope', '경찰': 'siren', '요리사': 'chef-hat',
