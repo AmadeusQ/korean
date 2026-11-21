@@ -18,7 +18,7 @@
       if (typeof k !== 'string' || k.length > 300 || !it || typeof it !== 'object') continue;
       if (/^num:[sn]:\d+$/.test(k)) continue; // старый формат чисел: ключ на каждое число
       // время ответа из будущего не должно навсегда перебивать местный прогресс
-      out[k] = { box: int(it.box, 0, MAX_BOX), due: num(it.due), right: int(it.right, 0, 1e6), wrong: int(it.wrong, 0, 1e6), last: Math.min(num(it.last), Date.now() + DAY) };
+      out[k] = { box: int(it.box, 0, MAX_BOX), due: Math.min(num(it.due), Date.now() + 33 * DAY), right: int(it.right, 0, 1e6), wrong: int(it.wrong, 0, 1e6), last: Math.min(num(it.last), Date.now() + DAY) };
     }
     return out;
   }
@@ -70,6 +70,8 @@
     countDay(correct); save();
     return it;
   }
+  // Ответ засчитывается в цель дня, но коробку не двигает (повтор того же задания в одной сессии)
+  function tally(correct) { countDay(correct); save(); }
   // Оценка карточки как в Anki: 0 снова, 1 трудно, 2 хорошо, 3 легко
   function grade(key, g) {
     const now = Date.now();
@@ -103,7 +105,7 @@
   }
 
   window.Store = {
-    get, box, isDue, answer, grade, forecastTomorrow, streak, lastDays, MAX_BOX,
+    get, box, isDue, answer, tally, grade, forecastTomorrow, streak, lastDays, MAX_BOX,
     todayStats: () => state.days[today()] || { n: 0, ok: 0 },
     settings: () => state.settings,
     // через cleanSettings: пустое поле цели не превратится в 0, скорость речи останется в пределах
@@ -115,7 +117,8 @@
     },
     // свои слова
     custom: () => state.custom || [],
-    addCustom(w) { state.custom = (state.custom || []).filter((x) => x.ko !== w.ko); state.custom.push({ ...w, added: today() }); save(); },
+    // обрезаем так же, как при загрузке: иначе после перезагрузки слово и ключ его прогресса изменятся
+    addCustom(w) { const c = cleanCustom([{ ...w, added: today() }])[0]; if (!c) return null; state.custom = (state.custom || []).filter((x) => x.ko !== c.ko); state.custom.push(c); save(); return c; },
     removeCustom(ko) { state.custom = (state.custom || []).filter((x) => x.ko !== ko); save(); },
     meta: (k) => state.meta?.[k],
     setMeta(k, v) { state.meta = state.meta || {}; state.meta[k] = v; save(); },

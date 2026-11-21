@@ -6,7 +6,7 @@
   const lessonName = (n) => (n === 0 ? 'Мои слова' : `제${n}과`);
   const avgMastery = (keys) => DB.mastery(keys);
   const learned = (keys) => keys.filter((k) => Store.box(k) >= 3).length;
-  const dueCount = () => { const now = Date.now(); return DB.entries.filter((e) => Store.isDue(e.key, now)).length; };
+  const dueCount = () => { const now = Date.now(); return DB.entriesFor(DB.openNums()).filter((e) => Store.isDue(e.key, now)).length; };
   const plural = (n, a, b, c) => { const m = n % 10, h = n % 100; return n + ' ' + (m === 1 && h !== 11 ? a : m >= 2 && m <= 4 && (h < 10 || h >= 20) ? b : c); };
 
   // ---------- Главная ----------
@@ -92,7 +92,7 @@
     return `<div class="modes">
       ${nxt ? row(`#/lesson/${nxt.number}`, `${nxt.number}과`, 'Следующий урок', `${esc(nxt.title)} · урок ${cur.number} освоен`) : ''}
       ${path.fresh ? '' : row('#/practice/mix', '오늘', 'Тренировка дня', due ? `Сначала повторение: ${plural(due, 'слово', 'слова', 'слов')}` : 'Слова, грамматика и фразы из пройденных уроков')}
-      ${nMist ? row('#/practice/mistakes', '오답', 'Мои ошибки', `${plural(nMist, 'задание', 'задания', 'заданий')}, в которых ты ошибался`) : ''}
+      ${nMist ? row('#/practice/mistakes', '오답', 'Мои ошибки', `${plural(nMist, 'задание', 'задания', 'заданий')}, в ${nMist % 10 === 1 && nMist % 100 !== 11 ? 'котором' : 'которых'} ты ошибался`) : ''}
       ${cur ? row(path.fresh ? `#/lesson/${cur.number}` : `#/practice/mix?l=${cur.number}`, `${cur.number}과`, path.fresh ? 'Начать с урока 1' : 'Текущий урок', `${esc(cur.title)}${path.fresh ? '' : ` · освоено ${pct}%`}`) : ''}
       ${cur && !path.fresh ? row(`#/practice/test?l=${cur.number}`, '시험', 'Контрольная', `По уроку ${cur.number}${test ? ` · лучший результат ${test.best}%` : cur !== DB.lessons[DB.lessons.length - 1] ? ' · от 80% откроет следующий урок' : ''}`) : ''}
     </div>`;
@@ -111,11 +111,11 @@
     root.innerHTML = `<h1 class="page-title">Уроки</h1>
       <div class="lessons">${DB.lessons.map((l) => {
         const keys = DB.entries.filter((e) => e.lesson === l.number).map((e) => e.key);
-        const m = Math.round(avgMastery(keys) * 100);
+        const m = Math.round(avgMastery(DB.lessonKeys(l.number)) * 100);
         return `<a class="lesson" href="#/lesson/${l.number}">
           <span class="kicker serif">제${l.number}과</span>
           <span class="l-body"><b>${esc(l.title)}</b><span class="muted sm">${esc(l.topics.map((t) => t.split(':')[0]).join(' · '))}</span>
-            <span class="muted xs">${plural(keys.length, 'новое слово', 'новых слова', 'новых слов')}${Store.getTest(l.number) ? ` · контрольная ${Store.getTest(l.number).best}%` : ''}</span></span>
+            <span class="muted xs">${plural(keys.length, 'новое слово или фраза', 'новых слова и фразы', 'новых слов и фраз')}${Store.getTest(l.number) ? ` · контрольная ${Store.getTest(l.number).best}%` : ''}</span></span>
           <span class="l-prog"><span class="pbar"><i style="width:${m}%"></i></span><span class="xs muted">${m}%</span></span>
         </a>`;
       }).join('')}</div>`;
@@ -271,8 +271,8 @@
       <div class="row dict-actions"><a class="btn sm ghost" id="dict-cards" href="#/practice/cards">Карточки по этой выборке</a><button class="btn sm ghost add-word" type="button">+ Своё слово</button></div>
       <form class="card form add-form" hidden>
         <h3>Новое слово</h3>
-        <label class="field"><span>По-корейски</span><input class="aw-ko" lang="ko" required autocomplete="off" placeholder="한글로…"></label>
-        <label class="field"><span>Перевод</span><input class="aw-ru" required autocomplete="off" placeholder="по-русски"></label>
+        <label class="field"><span>По-корейски</span><input class="aw-ko" lang="ko" maxlength="60" required autocomplete="off" placeholder="한글로…"></label>
+        <label class="field"><span>Перевод</span><input class="aw-ru" maxlength="120" required autocomplete="off" placeholder="по-русски"></label>
         <label class="field"><span>Тема</span><select class="aw-c">${['Мои слова', ...DB.categories().filter((c) => c !== 'Мои слова')].map((c) => `<option>${esc(c)}</option>`).join('')}</select></label>
         <div class="row"><button class="btn sm">Добавить</button><button class="btn sm ghost aw-cancel" type="button">Отмена</button></div>
       </form>
@@ -377,9 +377,11 @@
   }
 
   // ---------- Меню тренировки ----------
-  let practiceNums = null;
+  let practiceNums = null, practiceBase = '';
   function practiceMenu(root) {
-    if (!practiceNums) practiceNums = DB.openNums();
+    // выбор сбрасывается, когда открылся новый урок; удалённых своих слов в нём не остаётся
+    if (!practiceNums || practiceBase !== String(DB.openNums())) { practiceNums = DB.openNums(); practiceBase = String(practiceNums); }
+    practiceNums = practiceNums.filter((n) => allNums().includes(n));
     const draw = () => {
       root.innerHTML = `<h1 class="page-title">Тренировка</h1>
         <div class="card"><div class="card-head"><h3>Какие уроки</h3><button class="link all">${practiceNums.length === allNums().length ? 'Снять все' : 'Выбрать все'}</button></div>
@@ -431,7 +433,7 @@
         <div class="row"><button class="btn sm mk-link">Создать ссылку</button></div>
         <textarea class="xfer" readonly hidden></textarea>
       </div>
-      <div class="card"><h3>Как поставить на телефон</h3><p class="sm">Открой сайт на телефоне. В Chrome: меню ⋮ → «Добавить на главный экран». В Safari: «Поделиться» → «На экран «Домой»». Приложение откроется без браузерной рамки и будет работать без интернета.</p></div>`;
+      <div class="card"><h3>Как поставить на телефон</h3><p class="sm">Открой сайт на телефоне. В Chrome: меню ⋮ → «Добавить на главный экран». В Safari: «Поделиться» → «На экран „Домой“». Приложение откроется без браузерной рамки и будет работать без интернета.</p></div>`;
     root.querySelector('[data-k="theme"]').value = s.theme;
     root.querySelectorAll('[data-k]').forEach((el) => el.addEventListener('change', () => {
       const k = el.dataset.k; const v = el.type === 'checkbox' ? el.checked : el.type === 'range' || el.type === 'number' ? +el.value : el.value;
@@ -457,10 +459,11 @@
 
   async function importLink(root, data) {
     let other;
-    try { other = await Store.unpack(data); } catch { root.innerHTML = '<p class="empty">Ссылка повреждена — создай новую.</p>'; return; }
+    try { other = await Store.unpack(data); } catch { other = null; }
+    if (!other || typeof other !== 'object' || !other.items || typeof other.items !== 'object') { root.innerHTML = '<p class="empty">Ссылка повреждена — создай новую.</p>'; return; }
     const n = Object.keys(other.items || {}).length, d = Object.keys(other.days || {}).length;
     root.innerHTML = `<section class="card form"><h3>Перенос прогресса</h3>
-      <p>В ссылке: ${plural(n, 'задание', 'задания', 'заданий')} и ${plural(d, 'день', 'дня', 'дней')} занятий. Он объединится с прогрессом на этом устройстве — более свежие ответы победят.</p>
+      <p>В ссылке: ${plural(n, 'задание', 'задания', 'заданий')} и ${plural(d, 'день', 'дня', 'дней')} занятий. Прогресс из ссылки объединится с прогрессом на этом устройстве — более свежие ответы победят.</p>
       <div class="row"><button class="btn ok-imp">Перенести</button><a class="btn ghost" href="#/">Отмена</a></div></section>`;
     root.querySelector('.ok-imp').addEventListener('click', () => {
       try { Store.merge(other); } catch (err) { UI.toast('Ошибка: ' + err.message); return; }

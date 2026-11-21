@@ -31,7 +31,7 @@
     },
     // Свои слова живут как «урок 0»
     addCustom(w, persist = true) {
-      if (persist) Store.addCustom(w);
+      if (persist) { w = Store.addCustom(w); if (!w) return null; }
       const prev = DB.byKo.get(w.ko);
       if (prev) { if (!prev.lessons.includes(0)) prev.lessons.push(0); prev.mine = true; return prev; }
       const e = { ...w, kind: /\s/.test(w.ko) ? 'phrase' : 'word', key: 'w:' + w.ko, lesson: 0, lessons: [0], c: w.c || 'Мои слова', mine: true, t: w.t || (/다$/.test(w.ko) ? 'v' : undefined) };
@@ -66,6 +66,8 @@
       const before = new Set(DB.hangulUnits(lessons.filter((x) => x.number < n).map((x) => x.number)));
       const keys = DB.entries.filter((e) => e.lesson === l.number).map((e) => e.key);
       l.hangul.filter((u) => !before.has(u)).forEach((u) => (Hangul.UNITS[u]?.items || []).forEach((it) => keys.push('j:' + it[0])));
+      // урок-повторение без нового материала: считаем все его слова и фразы
+      if (!keys.length) DB.entries.filter((e) => e.lessons.includes(l.number)).forEach((e) => keys.push(e.key));
       return [...new Set(keys)];
     },
     mastery: (keys) => (keys.length ? keys.reduce((s, k) => s + Math.max(0, Store.box(k)), 0) / (keys.length * Store.MAX_BOX) : 0),

@@ -121,12 +121,12 @@
 
   // Числа помним по диапазонам, а не по каждому числу: иначе хранилище и ссылка переноса разрастаются
   const numBucket = (n) => (n <= 10 ? 'small' : n < 100 ? 'mid' : 'big');
-  const numItem = (sys, n) => ({ group: 'numbers', key: `num:${sys}:${numBucket(n)}`, types: TTS.available() ? ['num-read', 'num-value', 'num-listen'] : ['num-read', 'num-value'], sys, n });
+  const numItem = (sys, n) => ({ group: 'numbers', key: `num:${sys}:${numBucket(n)}`, uid: `num:${sys}:${n}`, types: TTS.available() ? ['num-read', 'num-value', 'num-listen'] : ['num-read', 'num-value'], sys, n });
 
   // Ключ из хранилища → задание (для «Моих ошибок»). null, если материала уже нет или он вне выбранных уроков.
   function resolveKey(key, nums) {
     const inLessons = (e) => e && e.lessons.some((n) => nums.includes(n));
-    const all = DB.allNums(); const J = unlocked(all); const tts = TTS.available();
+    const J = unlocked(nums); const tts = TTS.available();
     const [kind, ...rest] = key.split(':'); const arg = rest.join(':');
     const word = (ko) => { const e = DB.byKo.get(ko); return inLessons(e) ? e : null; };
     switch (kind) {
@@ -138,7 +138,7 @@
       case 'g': {
         const [gid, ...g] = rest; const val = g.join(':');
         if (gid === 'copula' || gid === 'topic') { const e = word(val); return e ? { group: 'grammar', key, types: [gid], entry: e } : null; }
-        if (gid === 'sent') { const [pk, jk] = val.split('|'); const p = DB.byKo.get(pk), jb = DB.byKo.get(jk); return p && jb ? { group: 'grammar', key, types: ['sentence'], p, jb } : null; }
+        if (gid === 'sent') { const [pk, jk] = val.split('|'); const p = word(pk), jb = word(jk); return p?.p && jb?.job ? { group: 'grammar', key, types: ['sentence'], p, jb } : null; }
         return null;
       }
       case 'build': { const l = sentenceLines(nums).find((x) => x.ko === arg); return l ? { group: 'build', key, types: ['build'], line: l } : null; }
@@ -198,7 +198,7 @@
   const shortRu = (s) => s.replace(/\s*\(.*?\)/g, '').split(/\s*[/,]\s*/)[0].trim();
   function pairLine(p, jb) {
     const ko = `${p.ko}${H.topic(p.ko)} ${jb.ko}${H.copula(jb.ko)}.`, a = shortRu(p.ru);
-    return { ko, ru: `${a[0].toUpperCase()}${a.slice(1)} — ${shortRu(jb.ru)}.`, toks: splitParticles(ko) };
+    return { ko, ru: `${a[0].toUpperCase()}${a.slice(1)}${p.t === 'pron' ? '' : ' —'} ${shortRu(jb.ru)}.`, toks: splitParticles(ko) };
   }
 
   // какое слово из словаря можно убрать из фразы: 학생이에요 → ＿＿이에요 (학생)
@@ -266,7 +266,8 @@
   }
   const HOMOPHONES = [['ㅙ', 'ㅚ', 'ㅞ'], ['ㅐ', 'ㅔ'], ['ㅒ', 'ㅖ']];
   const soundsSame = (a, b, cons) => HOMOPHONES.some((g) => g.includes(a) && g.includes(b))
-    || (cons !== 'ㅇ' && [a, b].includes('ㅢ') && [a, b].includes('ㅣ'));
+    || (cons !== 'ㅇ' && [a, b].includes('ㅢ') && [a, b].includes('ㅣ'))
+    || (cons !== 'ㅇ' && cons !== 'ㄹ' && [a, b].every((x) => ['ㅐ', 'ㅔ', 'ㅒ', 'ㅖ'].includes(x))); // 계 звучит как 게
   function syllFor(j, J) {
     const info = H.jamoInfo(j);
     if (info.kind === 'vowel') { const c = J.cons.length ? pick(J.cons.filter((x) => x !== 'ㅇ').concat('ㅇ')) : 'ㅇ'; return { c, v: j, target: 'v' }; }
@@ -488,12 +489,13 @@
     const queue = mode === 'dialog' ? dialogQueue(nums) : choose(pool, isTest ? TEST_LEN : isTimed ? 80 : filtered ? Math.min(pool.length, FILTER_LEN) : SESSION_LEN, isTimed ? 'mix' : mode);
     const introduced = new Set(); let introCount = 0;
     const introOk = !['cards', 'test', 'mistakes', 'timed'].includes(mode);
-    const retried = new Set();
+    const retried = new Set(), stored = new Set();
+    const qid = (it) => it.uid || it.key; // у чисел один ключ хранилища на диапазон, но вопросы в сессии разные
     const results = [];
     const marks = [];
     let idx = 0, q = null, answered = false;
     // alive: сессия ещё на экране; stepping: переход к следующему вопросу уже запущен (защита от двойного нажатия)
-    let alive = true, stepping = false;
+    let alive = true, stepping = false, activeRec = null;
     const later = (fn, ms) => setTimeout(() => { if (alive) fn(); }, ms);
     // tok — номер вопроса, к которому относится кнопка: клик по устаревшей кнопке ничего не делает
     function step(fn, tok) {
@@ -662,9 +664,10 @@
       mic.addEventListener('click', () => {
         if (answered) return;
         if (rec) { rec.stop(); return; }
-        rec = new SR(); rec.lang = 'ko-KR'; rec.maxAlternatives = 5; rec.interimResults = false;
+        rec = activeRec = new SR(); rec.lang = 'ko-KR'; rec.maxAlternatives = 5; rec.interimResults = false;
         mic.classList.add('on'); heard.textContent = 'Слушаю…';
         rec.onresult = (ev) => {
+          if (!alive) return;
           const alts = [...ev.results[0]].map((a) => a.transcript.trim());
           const target = norm(q.answer);
           const ok = alts.some((a) => norm(a) === target || norm(a).includes(target) || (q.fuzzy && similar(norm(a), target) >= 0.75));
@@ -702,7 +705,7 @@
       const b = Math.max(0, Store.box(q.item.key));
       const box = g === 1 ? Math.max(1, b) : Math.min(Store.MAX_BOX, b + (g === 3 ? 2 : 1));
       const days = [0, 1, 2, 4, 8, 16, 32][box] * (g === 1 ? 0.5 : 1);
-      return days < 1 ? '½ дня' : `${days} ${days === 1 ? 'день' : days < 5 ? 'дня' : 'дней'}`;
+      return days < 1 ? '½ дня' : `${plural(days, 'день', 'дня', 'дней')}`;
     }
     function renderCard() {
       const tok = idx;
@@ -720,10 +723,12 @@
     }
 
     function record(ok, g) {
-      if (g !== undefined) Store.grade(q.item.key, g); else Store.answer(q.item.key, ok);
+      // верный ответ на тот же диапазон чисел в одной сессии не двигает коробку второй раз
+      if (g !== undefined) Store.grade(q.item.key, g); else if (ok && q.item.uid && stored.has(q.item.key)) Store.tally(true); else Store.answer(q.item.key, ok);
+      stored.add(q.item.key);
       marks[idx] = ok;
       results.push({ q, ok });
-      if (!ok && !isTest && mode !== 'dialog' && !retried.has(q.item.key)) { retried.add(q.item.key); queue.push(q.item); }
+      if (!ok && !isTest && mode !== 'dialog' && !retried.has(qid(q.item))) { retried.add(qid(q.item)); queue.push(q.item); }
     }
 
     function done(ok) {
@@ -743,10 +748,10 @@
       clearInterval(timer);
       document.body.classList.remove('in-session');
       document.removeEventListener('keydown', onKey);
-      const first = new Map(); results.forEach((r) => { if (!first.has(r.q.item.key)) first.set(r.q.item.key, r.ok); });
+      const first = new Map(); results.forEach((r) => { if (!first.has(qid(r.q.item))) first.set(qid(r.q.item), r.ok); });
       const total = first.size, right = [...first.values()].filter(Boolean).length;
       const pct = total ? Math.round((right / total) * 100) : 0;
-      const mistakes = uniqBy(results.filter((r) => !r.ok), (r) => r.q.item.key);
+      const mistakes = uniqBy(results.filter((r) => !r.ok), (r) => qid(r.q.item));
       const stampText = pct >= 90 ? '참 잘했어요' : pct >= 70 ? '잘했어요' : '힘내요';
       let testNote = '';
       const timedBest = Store.meta('timedBest') || 0;
@@ -775,7 +780,7 @@
       if (q?.kind === 'intro' && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); $foot.querySelector('.next')?.click(); }
     }
     document.addEventListener('keydown', onKey);
-    start.cleanup = () => { alive = false; clearInterval(timer); window.speechSynthesis?.cancel(); document.removeEventListener('keydown', onKey); document.body.classList.remove('in-session'); };
+    start.cleanup = () => { alive = false; clearInterval(timer); try { activeRec?.abort(); } catch {} window.speechSynthesis?.cancel(); document.removeEventListener('keydown', onKey); document.body.classList.remove('in-session'); };
     next();
   }
 

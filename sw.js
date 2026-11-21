@@ -1,11 +1,20 @@
 // Офлайн-режим. Свои файлы: сначала сеть (новые уроки появляются сразу), но не дольше 4 секунд —
 // на слабой связи отдаём из кэша. Шрифты Google: из кэша, они не меняются.
-const CACHE = 'korean-v3';
-const SHELL = ['./', './index.html'];
+const CACHE = 'korean-v4';
+const SHELL = ['./', './index.html', './app/styles.css', './data/index.js', './manifest.webmanifest', './icon.svg', './icon-192.png',
+  ...['hangul', 'store', 'tts', 'ui', 'keyboard', 'numbers', 'data', 'practice', 'views', 'main'].map((f) => `./app/${f}.js`)];
+// уроки перечислены в data/index.js: берём их id оттуда, чтобы приложение открывалось без сети уже после первого визита
+async function precache() {
+  const c = await caches.open(CACHE);
+  const fresh = (u) => new Request(u, { cache: 'reload' }); // мимо HTTP-кэша браузера, иначе в офлайн-кэш попадёт старая версия
+  await c.addAll(SHELL.map(fresh));
+  const list = await (await fetch('./data/index.js', { cache: 'no-cache' })).text();
+  await c.addAll([...new Set(list.match(/lesson-\d+/g) || [])].map((id) => fresh(`./data/lessons/${id}.js`)));
+}
 const NET_TIMEOUT = 4000;
 
 self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).catch(() => {}).then(() => self.skipWaiting()));
+  e.waitUntil(precache().catch(() => {}).then(() => self.skipWaiting()));
 });
 self.addEventListener('activate', (e) => {
   e.waitUntil(caches.keys().then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)))).then(() => self.clients.claim()));
