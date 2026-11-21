@@ -165,7 +165,10 @@
       root.querySelectorAll('.tab').forEach((b) => b.classList.toggle('on', b.dataset.tab === k));
       body.innerHTML = TAB[k](l, photos);
       if (k === 'photos') body.querySelectorAll('[data-photo]').forEach((a) => a.addEventListener('click', (e) => { e.preventDefault(); lightbox(photos, +a.dataset.photo); }));
-      if (k === 'dialogues') body.querySelector('.hide-ru')?.addEventListener('change', (e) => body.classList.toggle('no-ru', e.target.checked));
+      if (k === 'dialogues') {
+        body.querySelector('.hide-ru')?.addEventListener('change', (e) => body.classList.toggle('no-ru', e.target.checked));
+        body.querySelectorAll('.play-dialog').forEach((b) => b.addEventListener('click', () => playDialog(b, l.dialogues[+b.dataset.d])));
+      }
     };
     root.querySelectorAll('.tab').forEach((b) => b.addEventListener('click', () => { show(b.dataset.tab); b.scrollIntoView({ inline: 'center', block: 'nearest' }); }));
     // затемнение у края показывает, что вкладки можно листать
@@ -185,7 +188,7 @@
     }
   }
 
-  const wordRow = (w) => { const e = DB.byKo.get(w.ko) || w; return `<div class="wrow" data-ko="${esc(w.ko)}"><div class="w-ko"><span class="ko">${esc(w.ko)}</span>${UI.rr(w.ko)}</div><div class="w-ru">${esc(w.ru)}</div>${strength(e.key)}${sayBtn(w.ko, 'sm')}</div>`; };
+  const wordRow = (w) => { const e = DB.byKo.get(w.ko) || w; return `<div class="wrow" data-ko="${esc(w.ko)}"><div class="w-ko"><span class="ko">${esc(w.ko)}</span>${UI.rr(w.ko)}</div><div class="w-ru">${esc(w.ru)}</div><span class="wpic">${UI.pic(w.ko)}</span>${strength(e.key)}${sayBtn(w.ko, 'sm')}</div>`; };
   const TAB = {
     overview(l) {
       const units = l.hangul.map((u) => H.UNITS[u]);
@@ -207,10 +210,25 @@
       + `<a class="btn" href="#/practice/grammar?l=${l.number}">Тренировать грамматику</a>`,
     dialogues: (l) => `<label class="toggle"><input type="checkbox" class="hide-ru"> Скрыть перевод</label>` + l.dialogues.map((d) => `<div class="card dialog"><h3>${esc(d.title)}</h3>
       ${d.lines.map((x) => `<div class="line">${x.who ? `<span class="who ko">${esc(x.who)}</span>` : '<span class="who"></span>'}<div class="bubble"><span class="ko">${esc(x.ko)}</span><div class="ru">${esc(x.ru)}</div></div>${sayBtn(x.ko, 'sm')}</div>`).join('')}
-      <button class="link" data-say="${esc(d.lines.map((x) => x.ko).join(' '))}">${icon('speaker')} Прослушать весь диалог</button></div>`).join('')
+      <button type="button" class="link play-dialog" data-d="${l.dialogues.indexOf(d)}">${icon('speaker')} <span>Прослушать по репликам</span></button></div>`).join('')
       + `<a class="btn" href="#/practice/build?l=${l.number}">Собирать фразы</a>`,
     photos: (l, photos) => `<div class="gallery">${photos.map((p, i) => `<a href="${p}" data-photo="${i}"><img src="${p}" loading="lazy" alt="Страница ${i + 1}"></a>`).join('')}</div>`,
   };
+
+  // Диалог вслух по репликам: звучащая подсвечивается, повторное нажатие останавливает
+  function playDialog(btn, d) {
+    const card = btn.closest('.dialog'), lines = [...card.querySelectorAll('.line')], label = btn.querySelector('span');
+    const mark = (i) => lines.forEach((x, k) => x.classList.toggle('speaking', k === i));
+    if (btn.classList.contains('on')) { TTS.stop(); return; }
+    // другой диалог, который ещё звучит, остановится сам: TTS.speakAll прерывает прежнюю очередь
+    const ok = TTS.speakAll(d.lines.map((x) => x.ko), (i) => {
+      mark(i);
+      if (i < 0) { btn.classList.remove('on'); label.textContent = 'Прослушать по репликам'; }
+      else lines[i].scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    });
+    if (!ok) { UI.say(''); return; }
+    btn.classList.add('on'); label.textContent = 'Остановить';
+  }
 
   function lightbox(photos, i) {
     const box = document.createElement('div'); box.className = 'lightbox';
@@ -240,7 +258,7 @@
     const box = document.createElement('div'); box.className = 'sheet-wrap';
     box.innerHTML = `<div class="sheet" role="dialog" aria-label="${esc(e.ko)}">
       <button class="icon-btn sheet-x" aria-label="Закрыть">${icon('close')}</button>
-      <div class="sheet-head">${UI.cells(e.ko, 'big')}${sayBtn(e.ko)}</div>
+      <div class="sheet-head">${UI.cells(e.ko, 'big')}${sayBtn(e.ko)}${UI.pic(e.ko, 'lg')}</div>
       ${H.pron(e.ko) !== e.ko ? `<div class="sheet-pr">Читается: <span class="ko">[${esc(H.pron(e.ko))}]</span></div>` : ''}
       ${Store.settings().romanize ? `<div class="rr sheet-rr">${esc(H.romanize(e.ko))}</div>` : ''}
       <div class="sheet-ru">${esc(e.ru)}</div>
@@ -318,7 +336,7 @@
       $('#dict-cards').href = `#/practice/cards${p.toString() ? '?' + p : ''}`;
       $('#dict-cards').textContent = `Карточки по этой выборке · ${list.length > 30 ? `30 из ${list.length}` : list.length}`;
       const row = (e) => `<div class="wrow" data-ko="${esc(e.ko)}"><div class="w-ko"><span class="ko serif">${esc(e.ko)}</span>${UI.rr(e.ko)}</div>
-        <div class="w-ru">${esc(e.ru)}<div class="w-meta">${esc(e.c)} · ${e.lessons.map((n) => (n === 0 ? 'мои' : `제${n}과`)).join(', ')}</div></div>${strength(e.key)}${sayBtn(e.ko, 'sm')}</div>`;
+        <div class="w-ru">${esc(e.ru)}<div class="w-meta">${esc(e.c)} · ${e.lessons.map((n) => (n === 0 ? 'мои' : `제${n}과`)).join(', ')}</div></div><span class="wpic">${UI.pic(e.ko)}</span>${strength(e.key)}${sayBtn(e.ko, 'sm')}</div>`;
       const groupOf = dictState.sort === 'abc' ? (e) => { const d = H.decompose(e.ko[0]); return d ? d.cho : e.ko[0]; }
         : dictState.sort === 'lesson' ? (e) => lessonName(e.lesson) : null;
       if (dictState.sort === 'lesson') list = list.slice().sort((a, b) => a.lesson - b.lesson);

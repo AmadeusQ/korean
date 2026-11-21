@@ -370,7 +370,7 @@
   const numExplain = (it) => { const S = Numbers.SYSTEMS[it.sys]; const r = S.read(it.n); return `<div class="ex-line"><b>${it.n}</b> = <span class="ko">${r}</span>${sayBtn(r, 'sm')}</div><div class="ex-ru">${S.title}: ${S.use}</div><div class="ex-rule"><button type="button" class="link" data-rule="numbers">Как устроены числа →</button></div>`; };
   const RULE_NAME = { topic: '은/는', copula: '이에요/예요', yesno: '네/아니요' };
   const ruleBtn = (id) => `<button type="button" class="link" data-rule="${id}">Правило${RULE_NAME[id] ? ' ' + RULE_NAME[id] : ''} →</button>`;
-  const entryExplain = (e) => `<div class="ex-line"><span class="ko">${esc(e.ko)}</span>${UI.rr(e.ko)}${sayBtn(e.ko, 'sm')}</div><div class="ex-ru">${esc(e.ru)}</div>`;
+  const entryExplain = (e) => `<div class="ex-line"><span class="ko">${esc(e.ko)}</span>${UI.rr(e.ko)}${sayBtn(e.ko, 'sm')}${UI.pic(e.ko, 'sm')}</div><div class="ex-ru">${esc(e.ru)}</div>`;
   // Знаки препинания в вариантах и плашках подсказывали ответ (вопрос — тот, что с «?», плашка с точкой — последняя)
   const bare = (s) => s.replace(/[.,!?…]/g, '').replace(/\s+/g, ' ').trim();
   const tail = (s) => s.replace(/[.?!…]+$/, '');
@@ -463,7 +463,7 @@
         yes ? (other.length ? `아니요, ${cop(pick(other).ko)}` : '') : `네, ${cop(asked.ko)}`].filter(Boolean), (x) => x);
       const question = cop(asked.ko) + '?';
       return { kind: 'choice', label: 'Ответь на вопрос', autoplay: question,
-        prompt: `<div class="hint">Перед тобой: <b>${esc(shortRu(e.ru))}</b></div><div class="q-ko md">${esc(question)}</div>${sayBtn(question)}`,
+        prompt: `${UI.pic(e.ko, 'md')}<div class="hint">Перед тобой: <b>${esc(shortRu(e.ru))}</b></div><div class="q-ko md">${esc(question)}</div>${sayBtn(question)}`,
         options: shuffle(opts).map((x) => ({ text: x, ok: x === right, ko: true })), sayAfter: right + '.',
         explain: `<div class="ex-line">${yes ? `Да, это ${esc(shortRu(e.ru))}` : `Это не ${esc(shortRu(asked.ru))}, а ${esc(shortRu(e.ru))}`} → <span class="ko">${esc(right)}.</span>${sayBtn(right, 'sm')}</div>
           <div class="ex-ru"><span class="ko">${esc(e.ko)}</span> кончается на ${H.hasBatchim(e.ko) ? 'согласную → 이에요' : 'гласную → 예요'}</div><div class="row"><button type="button" class="link" data-rule="yesno">Правило 네/아니요 →</button><button type="button" class="link" data-rule="copula">Правило 이에요/예요 →</button></div>` };
@@ -756,7 +756,7 @@
       // пример из уроков, где слово уже встретилось (свои слова — из любых)
       const upTo = Math.max(...e.lessons) || Infinity;
       const ex = sentenceLines(DB.allNums().filter((n) => n > 0 && n <= upTo)).find((l) => l.ko.split(/\s+/).some((t) => t.startsWith(e.ko)) && l.ko !== e.ko);
-      $body.innerHTML = `<div class="q-label">Новое слово</div><div class="q-prompt intro">${UI.cells(e.ko, 'big')}${sayBtn(e.ko)}
+      $body.innerHTML = `<div class="q-label">Новое слово</div><div class="q-prompt intro">${UI.pic(e.ko, 'lg')}${UI.cells(e.ko, 'big')}${sayBtn(e.ko)}
         ${UI.rr(e.ko)}<div class="q-ru">${esc(e.ru)}</div>
         ${ex ? `<div class="intro-ex"><span class="ko">${esc(ex.ko)}</span><span class="muted sm">${esc(ex.ru)}</span></div>` : ''}</div>`;
       $foot.innerHTML = '<button class="btn wide next">Запомнил</button>';
@@ -947,7 +947,7 @@
       const tok = idx;
       const e = q.entry; const koFront = q.front === 'ko';
       const front = koFront ? UI.cells(e.ko, 'big') : `<div class="q-ru">${esc(e.ru)}</div>`;
-      const back = `<div class="card-back">${UI.cells(e.ko, 'big')}${UI.rr(e.ko)}<div class="q-ru sm">${esc(e.ru)}</div>${sayBtn(e.ko)}</div>`;
+      const back = `<div class="card-back">${UI.pic(e.ko, 'lg')}${UI.cells(e.ko, 'big')}${UI.rr(e.ko)}<div class="q-ru sm">${esc(e.ru)}</div>${sayBtn(e.ko)}</div>`;
       $body.innerHTML = `<div class="q-label">${koFront ? 'Вспомни перевод' : 'Вспомни по-корейски'}</div><div class="flash"><div class="flash-front">${front}${koFront ? sayBtn(e.ko) : ''}</div></div>`;
       if (koFront) later(() => TTS.speak(e.ko), 200);
       $foot.innerHTML = `<button class="btn wide reveal">Показать ответ</button>`;

@@ -30,6 +30,7 @@ ctx.document = {
 vm.createContext(ctx);
 const run = (f) => vm.runInContext(read(f), ctx, { filename: f });
 run('data/index.js');
+run('data/pictures.js');
 ['hangul', 'store', 'tts', 'ui', 'keyboard', 'numbers', 'data', 'practice'].forEach((f) => run(`app/${f}.js`));
 
 const errors = new Set();
@@ -57,6 +58,8 @@ const ROUNDS = 6; // вопросы случайные: каждый генер�
         if (texts.length < 2) errors.add(`${where}: меньше двух вариантов`);
         if (texts.some((x) => !String(x).trim())) errors.add(`${where}: пустой вариант`);
       }
+      // картинка подсказала бы ответ: в вопросе её быть не должно (кроме «Перед тобой: …», где она и есть условие)
+      if (t !== 'yesno' && /class="pic/.test(q.prompt || '')) errors.add(`${where}: картинка в вопросе`);
       if ((q.kind === 'type' || q.kind === 'build') && !q.answer) errors.add(`${where}: нет ответа`);
       if (q.kind === 'build' && q.answerToks && q.answerToks.some((x) => !q.tokens.includes(x))) errors.add(`${where}: плашек ответа нет среди плашек`);
     }

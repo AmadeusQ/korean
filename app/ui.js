@@ -61,8 +61,13 @@
     if (s.length > 6 || /\s/.test(ko) || !s.every(Hangul.isSyllable)) return `<span class="ko serif phrase ${cls}">${esc(ko)}</span>`;
     return `<span class="cells ${cls}">${s.map((c) => `<span class="cell">${esc(c)}</span>`).join('')}</span>`;
   }
+  // Картинка к слову (data/pictures.js): только там, где перевод уже виден, чтобы не подсказывать ответ
+  const pic = (ko, cls = '') => {
+    const d = window.PICTURE_ICONS?.[window.PICTURES?.[ko]];
+    return d ? `<svg class="pic ${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>` : '';
+  };
   // Печать 도장
   const stamp = (text) => `<div class="stamp" aria-label="${esc(text)}"><span>${esc(text)}</span></div>`;
 
-  window.UI = { esc, shuffle, pick, uniqBy, icon, sayBtn, pr, rr, toast, say, strength, cells, stamp };
+  window.UI = { esc, shuffle, pick, uniqBy, icon, sayBtn, pr, rr, toast, say, strength, cells, stamp, pic };
 })();
