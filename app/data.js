@@ -60,6 +60,30 @@
     },
     grammar(nums) { return lessons.filter((l) => nums.includes(l.number)).flatMap((l) => l.grammar.map((g) => ({ ...g, lesson: l.number }))); },
     dialogues(nums) { return lessons.filter((l) => nums.includes(l.number)).flatMap((l) => l.dialogues.map((d) => ({ ...d, lesson: l.number }))); },
+    // Задания, которые урок открывает впервые: его новые слова и фразы, новые буквы хангыля
+    lessonKeys(n) {
+      const l = DB.lesson(n); if (!l) return [];
+      const before = new Set(DB.hangulUnits(lessons.filter((x) => x.number < n).map((x) => x.number)));
+      const keys = DB.entries.filter((e) => e.lesson === l.number).map((e) => e.key);
+      l.hangul.filter((u) => !before.has(u)).forEach((u) => (Hangul.UNITS[u]?.items || []).forEach((it) => keys.push('j:' + it[0])));
+      return [...new Set(keys)];
+    },
+    mastery: (keys) => (keys.length ? keys.reduce((s, k) => s + Math.max(0, Store.box(k)), 0) / (keys.length * Store.MAX_BOX) : 0),
+    // Урок освоен: контрольная от 80% или задания урока в среднем во 2–3 коробке
+    passed(n) { const t = Store.getTest(n); return (!!t && t.best >= 80) || DB.mastery(DB.lessonKeys(n)) >= 0.4; },
+    // Путь по урокам: текущий — последний начатый (новичку первый), следующий — когда текущий освоен
+    path() {
+      const nums = lessons.map((l) => l.number);
+      const started = nums.filter((n) => Store.getTest(n) || DB.lessonKeys(n).some((k) => Store.get(k)));
+      const current = started.length ? Math.max(...started) : nums[0];
+      const next = DB.passed(current) ? nums[nums.indexOf(current) + 1] ?? null : null;
+      return { current, next, fresh: !started.length };
+    },
+    // Уроки, открытые на пути (до текущего включительно) и свои слова: по ним идёт тренировка без выбора уроков
+    openNums() {
+      const { current } = DB.path();
+      return [...lessons.filter((l) => l.number <= current).map((l) => l.number), ...(Store.custom().length ? [0] : [])];
+    },
     categories: () => [...new Set(DB.entries.map((e) => e.c))].sort((a, b) => a.localeCompare(b, 'ru')),
   };
   window.DB = DB;

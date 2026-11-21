@@ -11,6 +11,7 @@
     hangul: { title: 'Хангыль', desc: 'Буквы, слоги и патчим', ex: 'ㄱ+ㅏ' },
     grammar: { title: 'Грамматика', desc: '이에요 / 예요 и 은 / 는', ex: '-예요' },
     build: { title: 'Фразы', desc: 'Собери фразу и вставь пропущенное слово', ex: '저는…' },
+    translate: { title: 'Составь предложение', desc: 'Переведи с русского: слова и частицы по отдельности', ex: '은/는' },
     match: { title: 'Найди пары', desc: 'Соедини слова с переводом на время', ex: '짝' },
     timed: { title: '5 минут', desc: 'Сколько успеешь за пять минут', ex: '5분' },
     numbers: { title: 'Числа', desc: '일, 이, 삼 и 하나, 둘, 셋', ex: '123' },
@@ -105,6 +106,16 @@
       lines.forEach((l) => { const c = clozeTarget(l); if (c) add('build', 'cloze:' + l.ko, ['cloze'], { line: l, ...c }); });
       if (mode === 'mix') pool.push(...dialogLines(nums));
     }
+    if (['mix', 'translate'].includes(mode)) {
+      translateLines(nums).forEach((l) => add('build', 'tr:' + l.ko, ['translate'], { line: l, toks: l.toks }));
+      if (DB.grammar(nums).some((g) => g.id === 'topic')) {
+        const persons = entries.filter((e) => e.p), jobs = entries.filter((e) => e.job);
+        for (let i = 0; i < 10 && persons.length && jobs.length; i++) {
+          const l = pairLine(pick(persons), pick(jobs));
+          add('build', 'tr:' + l.ko, ['translate'], { line: l, toks: l.toks });
+        }
+      }
+    }
     return uniqBy(pool, (p) => p.key);
   }
 
@@ -132,6 +143,14 @@
       }
       case 'build': { const l = sentenceLines(nums).find((x) => x.ko === arg); return l ? { group: 'build', key, types: ['build'], line: l } : null; }
       case 'cloze': { const l = sentenceLines(nums).find((x) => x.ko === arg); const c = l && clozeTarget(l); return c ? { group: 'build', key, types: ['cloze'], line: l, ...c } : null; }
+      case 'tr': {
+        const l = translateLines(nums).find((x) => x.ko === arg);
+        if (l) return { group: 'build', key, types: ['translate'], line: l, toks: l.toks };
+        // предложение «X은/는 Y이에요» собиралось из слов урока, а не из готовых фраз
+        const m = arg.match(/^(.+?)(은|는) (.+)(이에요|예요)\.$/); const p = m && word(m[1]), jb = m && word(m[3]);
+        if (!p || !jb || !p.p || !jb.job) return null;
+        const pl = pairLine(p, jb); return { group: 'build', key, types: ['translate'], line: pl, toks: pl.toks };
+      }
       case 'dl': { for (const d of DB.dialogues(nums)) { const i = d.lines.findIndex((l, k) => k > 0 && l.ko === arg); if (i > 0) return { group: 'build', key, types: ['dialog-line'], dlg: d, i }; } return null; }
       case 'write': {
         if (rest[0] === 'j') { const j = rest.slice(1).join(':'); return J.vowels.concat(J.cons).includes(j) ? { group: 'write', key, types: ['write'], target: j, jamo: true } : null; }
@@ -158,6 +177,30 @@
     ];
     return uniqBy(lines, (l) => l.ko).filter((l) => l.ko.trim().split(/\s+/).length >= 2);
   }
+  // «Составь предложение»: частицы 은/는 и связка 이에요/예요 отдельными плашками, к ним пара-обманка
+  const PAIR = { 은: '는', 는: '은', 이에요: '예요', 예요: '이에요' };
+  function splitParticles(ko) {
+    const out = []; let n = 0;
+    for (const raw of ko.trim().split(/\s+/)) {
+      const t = raw.replace(/[.,!?]/g, ''); if (!t) continue;
+      const cop = t.match(/^(.+?)(이에요|예요)$/), top = t.match(/^(.+)(은|는)$/);
+      if (cop && /[가-힣]$/.test(cop[1])) { out.push(cop[1], cop[2]); n++; }
+      else if (top && DB.byKo.has(top[1])) { out.push(top[1], top[2]); n++; }
+      else out.push(t);
+    }
+    return n ? out : null;
+  }
+  function translateLines(nums) {
+    if (!DB.grammar(nums).some((g) => g.id === 'copula' || g.id === 'topic')) return [];
+    return sentenceLines(nums).map((l) => ({ ...l, toks: splitParticles(l.ko) })).filter((l) => l.toks && l.toks.length <= 8);
+  }
+  // «младший брат / сестра» → «младший брат», «я (вежливо)» → «я»
+  const shortRu = (s) => s.replace(/\s*\(.*?\)/g, '').split(/\s*[/,]\s*/)[0].trim();
+  function pairLine(p, jb) {
+    const ko = `${p.ko}${H.topic(p.ko)} ${jb.ko}${H.copula(jb.ko)}.`, a = shortRu(p.ru);
+    return { ko, ru: `${a[0].toUpperCase()}${a.slice(1)} — ${shortRu(jb.ru)}.`, toks: splitParticles(ko) };
+  }
+
   // какое слово из словаря можно убрать из фразы: 학생이에요 → ＿＿이에요 (학생)
   function clozeTarget(l) {
     const tokens = l.ko.split(/\s+/); let best = null;
@@ -381,6 +424,17 @@
           <div class="hint">Что ответит ${esc(line.who || 'собеседник')}? По смыслу: «${esc(line.ru)}»</div>`,
         options: shuffle([line, ...ds]).map((x) => ({ text: x.ko, ok: x === line, ko: true })), sayAfter: line.ko,
         explain: `<div class="ex-line"><span class="ko">${esc(line.ko)}</span>${sayBtn(line.ko, 'sm')}</div><div class="ex-ru">${esc(line.ru)}</div>` };
+    },
+    translate(it) {
+      const l = it.line, toks = it.toks;
+      const extra = [...new Set(toks.filter((t) => PAIR[t]).map((t) => PAIR[t]))].filter((x) => !toks.includes(x));
+      const tokens = [...toks, ...extra];
+      const order = shuffle(tokens.map((t, i) => i));
+      const why = toks.map((t, i) => PAIR[t] && i ? `<div class="ex-ru"><span class="ko">${esc(toks[i - 1])}</span> кончается на ${H.hasBatchim(toks[i - 1]) ? 'согласную' : 'гласную'} → <b class="ko">${esc(t)}</b></div>` : '').join('');
+      const rules = [toks.some((t) => t === '은' || t === '는') && '<button type="button" class="link" data-rule="topic">Правило 은/는 →</button>', toks.some((t) => t === '이에요' || t === '예요') && '<button type="button" class="link" data-rule="copula">Правило 이에요/예요 →</button>'].filter(Boolean).join('');
+      return { kind: 'build', label: 'Составь предложение', prompt: `<div class="q-ru">${esc(l.ru)}</div><div class="hint">Частицы отдельно.${extra.length ? " Лишние плашки останутся внизу." : ""}</div>`,
+        tokens, need: toks.length, answerToks: toks, order, answer: l.ko, sayAfter: l.ko,
+        explain: `<div class="ex-line"><span class="ko">${esc(l.ko)}</span>${sayBtn(l.ko, 'sm')}</div>${why}<div class="row">${rules}</div>` };
     },
     build(it) {
       const l = it.line; const tokens = l.ko.trim().split(/\s+/);
@@ -634,8 +688,8 @@
         $line.querySelectorAll('.tok').forEach((b) => b.addEventListener('click', () => { if (answered) return; picked.splice(+b.dataset.k, 1); draw(); }));
         $bank.querySelectorAll('.tok').forEach((b) => b.addEventListener('click', () => {
           if (answered) return; picked.push(+b.dataset.t); draw();
-          if (picked.length === q.tokens.length) {
-            const ok = picked.map((t) => q.tokens[t]).join(' ') === q.tokens.join(' ');
+          if (picked.length === (q.need || q.tokens.length)) {
+            const ok = picked.map((t) => q.tokens[t]).join(' ') === (q.answerToks || q.tokens).join(' ');
             $line.classList.add(ok ? 'right' : 'wrong'); done(ok);
           }
         }));

@@ -4,10 +4,7 @@
   const H = Hangul;
   const allNums = () => DB.allNums();
   const lessonName = (n) => (n === 0 ? 'Мои слова' : `제${n}과`);
-  const avgMastery = (keys) => {
-    if (!keys.length) return 0;
-    return keys.reduce((s, k) => s + Math.max(0, Store.box(k)), 0) / (keys.length * Store.MAX_BOX);
-  };
+  const avgMastery = (keys) => DB.mastery(keys);
   const learned = (keys) => keys.filter((k) => Store.box(k) >= 3).length;
   const dueCount = () => { const now = Date.now(); return DB.entries.filter((e) => Store.isDue(e.key, now)).length; };
   const plural = (n, a, b, c) => { const m = n % 10, h = n % 100; return n + ' ' + (m === 1 && h !== 11 ? a : m >= 2 && m <= 4 && (h < 10 || h >= 20) ? b : c); };
@@ -27,7 +24,7 @@
     const cal = [...days, ...Array(6 - wd).fill(null)];
     const lvl = (d) => (!d ? 'f' : !d.n ? 0 : d.n >= goal ? 3 : d.n >= goal / 2 ? 2 : 1);
     const CELLS = 10, filled = Math.min(CELLS, Math.floor((st.n / goal) * CELLS));
-    const last = DB.lessons[DB.lessons.length - 1];
+    const path = DB.path();
     root.innerHTML = `
       <section class="today">
         <div class="today-main">
@@ -43,6 +40,7 @@
         </div>
         ${st.n >= goal ? UI.stamp('참 잘했어요') : ''}
       </section>
+      ${path.fresh ? welcome() : ''}
 
       <section class="stats">
         <div><b>${DB.entries.length}</b><span>слов и фраз</span></div>
@@ -54,7 +52,7 @@
       <div class="home-cols">
         <section class="block">
           <h2 class="h">Что делать сейчас</h2>
-          ${quickList(last, due)}
+          ${quickList(path, due)}
           <a class="link all-modes" href="#/practice">Все режимы тренировки →</a>
         </section>
         <div>
@@ -70,19 +68,37 @@
     `;
   }
 
-  function quickList(last, due) {
-    const nMist = Practice.mistakes(allNums()).length;
+  // Первый запуск: с чего начать и где что лежит
+  function welcome() {
+    return `<section class="card welcome">
+      <h3>С чего начать</h3>
+      <ol class="sm">
+        <li>Открой <a class="link" href="#/lesson/1">урок 1</a>. В уроке есть обзор, слова, фразы, грамматика и диалоги.</li>
+        <li>Нажми «Тренировать урок». Новое слово сначала покажется карточкой, потом будут вопросы по нему.</li>
+        <li>Занимайся каждый день. «Тренировка дня» повторяет то, что пора повторить, и добавляет новое из пройденных уроков.</li>
+        <li>Когда урок освоен или контрольная сдана на 80%, здесь появится следующий урок.</li>
+      </ol>
+      <p class="muted sm">Во вкладке «Хангыль» таблица букв, в «Словаре» все слова с поиском.</p>
+    </section>`;
+  }
+
+  function quickList(path, due) {
+    const nMist = Practice.mistakes(DB.openNums()).length;
+    const cur = DB.lesson(path.current), nxt = path.next != null ? DB.lesson(path.next) : null;
     const row = (href, ex, title, desc) => `<a class="mode" href="${href}"><span class="mode-ex serif">${ex}</span><span class="mode-t"><b>${title}</b><span>${desc}</span></span><span class="arr">→</span></a>`;
+    const pct = cur ? Math.round(DB.mastery(DB.lessonKeys(cur.number)) * 100) : 0;
+    const test = cur && Store.getTest(cur.number);
     return `<div class="modes">
-      ${row('#/practice/mix', '오늘', 'Тренировка дня', due ? `Сначала повторение: ${plural(due, 'слово', 'слова', 'слов')}` : 'Слова, хангыль, грамматика и фразы вперемешку')}
+      ${nxt ? row(`#/lesson/${nxt.number}`, `${nxt.number}과`, 'Следующий урок', `${esc(nxt.title)} · урок ${cur.number} освоен`) : ''}
+      ${path.fresh ? '' : row('#/practice/mix', '오늘', 'Тренировка дня', due ? `Сначала повторение: ${plural(due, 'слово', 'слова', 'слов')}` : 'Слова, грамматика и фразы из пройденных уроков')}
       ${nMist ? row('#/practice/mistakes', '오답', 'Мои ошибки', `${plural(nMist, 'задание', 'задания', 'заданий')}, в которых ты ошибался`) : ''}
-      ${last ? row(`#/practice/mix?l=${last.number}`, `${last.number}과`, 'Последний урок', esc(last.title)) : ''}
-      ${last ? row(`#/practice/test?l=${last.number}`, '시험', 'Контрольная', `По уроку ${last.number}${Store.getTest(last.number) ? ` · лучший результат ${Store.getTest(last.number).best}%` : ''}`) : ''}
+      ${cur ? row(path.fresh ? `#/lesson/${cur.number}` : `#/practice/mix?l=${cur.number}`, `${cur.number}과`, path.fresh ? 'Начать с урока 1' : 'Текущий урок', `${esc(cur.title)}${path.fresh ? '' : ` · освоено ${pct}%`}`) : ''}
+      ${cur && !path.fresh ? row(`#/practice/test?l=${cur.number}`, '시험', 'Контрольная', `По уроку ${cur.number}${test ? ` · лучший результат ${test.best}%` : cur !== DB.lessons[DB.lessons.length - 1] ? ' · от 80% откроет следующий урок' : ''}`) : ''}
     </div>`;
   }
 
   function modeGrid(nums) {
-    const q = nums.length === allNums().length ? '' : `?l=${nums.join(',')}`;
+    const q = String(nums) === String(DB.openNums()) ? '' : `?l=${nums.join(',')}`;
     return `<div class="modes">${Object.entries(Practice.MODES).filter(([, m]) => !m.hidden).map(([k, m]) => {
       const why = m.tts && !TTS.available() ? 'нужен корейский голос' : m.mic && !Practice.micSupported() ? 'браузер не распознаёт речь' : '';
       return `<a class="mode ${why ? 'off' : ''}" href="#/practice/${k}${q}" data-mode="${k}"><span class="mode-ex serif">${m.ex}</span><span class="mode-t"><b>${m.title}</b><span>${why || m.desc}</span></span><span class="arr">→</span></a>`;
@@ -352,7 +368,7 @@
       : it.target ? `пропись <span class="ko">${esc(it.target)}</span>`
       : it.jamo ? `буква <span class="ko">${esc(it.jamo)}</span>` : it.line ? `<span class="ko">${esc(it.line.ko)}</span>`
       : it.p ? `<span class="ko">${esc(it.p.ko)} … ${esc(it.jb.ko)}</span>` : it.dlg ? `<span class="ko">${esc(it.dlg.lines[it.i].ko)}</span>` : esc(it.key);
-    const q = nums.length === allNums().length ? '' : `?l=${nums.join(',')}`;
+    const q = String(nums) === String(DB.openNums()) ? '' : `?l=${nums.join(',')}`;
     return `<section class="block mistakes"><h2 class="h">Мои ошибки</h2>
       ${list.length ? `<div class="mist-list">${list.slice(0, 8).map((it) => `<div class="mist-row"><span>${label(it)}</span><span class="muted xs">ошибок: ${it.s.wrong}</span></div>`).join('')}</div>
         <div class="row"><a class="btn" href="#/practice/mistakes${q}">Тренировать ошибки · ${list.length}</a></div>`
@@ -362,7 +378,7 @@
   // ---------- Меню тренировки ----------
   let practiceNums = null;
   function practiceMenu(root) {
-    if (!practiceNums) practiceNums = allNums();
+    if (!practiceNums) practiceNums = DB.openNums();
     const draw = () => {
       root.innerHTML = `<h1 class="page-title">Тренировка</h1>
         <div class="card"><div class="card-head"><h3>Какие уроки</h3><button class="link all">${practiceNums.length === allNums().length ? 'Снять все' : 'Выбрать все'}</button></div>

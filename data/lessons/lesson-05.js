@@ -1,7 +1,7 @@
 registerLesson({
   id: 'lesson-05',
   number: 5,
-  title: 'Рабочая тетрадь: знакомство',
+  title: 'Повторение: знакомство',
   source: 'Рабочая тетрадь 1A, стр. 26–30: 1과 «안녕하세요? 저는 안나예요»',
   photos: 5,
   topics: [

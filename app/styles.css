@@ -88,6 +88,7 @@ body.in-session .topbar { display: none; }
 .card { background: var(--sheet); border: 1px solid var(--line); border-radius: var(--r-lg); padding: 20px; margin-bottom: 16px; }
 .card-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-bottom: 8px; }
 .card.warn { border-color: color-mix(in srgb, var(--accent) 40%, var(--line)); }
+.welcome ol { margin: 8px 0 10px; padding-left: 20px; } .welcome li { margin-bottom: 6px; }
 .card.note { border-left: 3px solid var(--accent); }
 .page-title { margin-bottom: 20px; } .page-title .count { font-size: .55em; font-weight: 400; }
 .h { font-size: 13px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin: 0 0 12px; padding-bottom: 8px; border-bottom: 1px solid var(--line); }
