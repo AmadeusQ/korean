@@ -42,12 +42,19 @@
   }
 
   // Новая версия сайта. GitHub Pages ставит всем файлам время выкладки (Last-Modified), по нему и сверяемся.
-  // Установленное на телефон приложение часто не перезапускается неделями — проверяем при каждом возвращении в него.
+  // Своя версия — время загруженной страницы (document.lastModified): если она открылась из офлайн-кэша старой,
+  // плашка появится сразу. Проверяем при старте, при возвращении в приложение, при переходах и раз в 5 минут, пока оно открыто
+  // (не чаще раза в 3 минуты). Pages кэширует ответы до 10 минут, так что плашка может прийти не сразу после выкладки.
   function watchUpdates() {
     if (!location.protocol.startsWith('http')) return;
-    let ver = null, at = 0, pending = false;
+    const GAP = 3 * 60000;
+    const mine = Date.parse(document.lastModified); // без заголовка браузер даёт текущее время — тогда новее не будет ничего
+    let at = 0, pending = false, seen = null, firstTag = null;
     const stamp = async () => {
-      try { const r = await fetch('index.html', { method: 'HEAD', cache: 'no-store' }); return r.ok ? r.headers.get('last-modified') || r.headers.get('etag') : null; } catch { return null; }
+      try {
+        const r = await fetch('index.html', { method: 'HEAD', cache: 'no-store' });
+        return r.ok ? { time: Date.parse(r.headers.get('last-modified') || ''), tag: r.headers.get('etag') } : null;
+      } catch { return null; }
     };
     const show = () => {
       // посреди тренировки не отвлекаем: плашка появится после неё
@@ -57,17 +64,26 @@
       const bar = document.createElement('div'); bar.className = 'update-bar'; bar.setAttribute('role', 'status');
       bar.innerHTML = '<span>Вышла новая версия</span><button type="button" class="btn sm">Обновить</button><button type="button" class="icon-btn" aria-label="Позже">' + UI.icon('close') + '</button>';
       bar.querySelector('.btn').addEventListener('click', () => location.reload());
-      bar.querySelector('.icon-btn').addEventListener('click', () => bar.remove());
+      // «Позже»: про эту версию больше не напоминаем, про следующую — да
+      bar.querySelector('.icon-btn').addEventListener('click', () => { bar.remove(); dismissed = seen; });
       document.body.appendChild(bar);
     };
+    let dismissed = null;
     const check = async () => {
+      if (document.visibilityState !== 'visible' || Date.now() - at < GAP) return;
       at = Date.now();
       const v = await stamp(); if (!v) return;
-      if (ver === null) ver = v; else if (v !== ver) show();
+      // время выкладки новее загруженной страницы (точность заголовка — секунда); без Last-Modified — по смене ETag
+      const key = v.time || v.tag; if (!key) return;
+      const newer = v.time ? v.time > mine + 1000 : firstTag !== null && v.tag !== firstTag;
+      if (firstTag === null) firstTag = v.tag;
+      if (!newer || key === dismissed) return;
+      seen = key; show();
     };
     check();
-    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && Date.now() - at > 3 * 60000) check(); });
-    window.addEventListener('hashchange', () => { if (pending) setTimeout(show, 300); });
+    document.addEventListener('visibilitychange', check);
+    setInterval(check, 5 * 60000);
+    window.addEventListener('hashchange', () => { if (pending) setTimeout(show, 300); else check(); });
   }
   boot();
 })();
