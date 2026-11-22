@@ -77,7 +77,7 @@
       <div class="card rd-text ${t.words ? 'rd-words' : ''}">${lines.map((l, i) => `<div class="rd-line" data-i="${i}">
         ${l.who ? `<span class="who ko">${esc(l.who)}</span>` : ''}
         <div class="rd-body"><p class="rd-ko ko">${l.words.map((w, k) => `<button type="button" class="rw" data-i="${i}" data-k="${k}">${esc(w.text)}</button>`).join(' ')}</p>
-        <p class="rd-tr">${esc(l.ru)}</p></div>${sayBtn(l.ko, 'sm')}</div>`).join('')}</div>
+        <p class="rd-tr">${esc(l.ru)}</p></div>${sayBtn(t.words ? l.words.map((w) => w.text).join(', ') : l.ko, 'sm')}</div>`).join('')}</div>
       <p class="muted xs">Нажми на слово: покажу перевод и как оно читается.</p>
       ${items.length ? `<div class="card rd-quiz"><h3>Понял ли текст?</h3>${shuffle(items).map((it, n) => quizHtml(it, n)).join('')}</div>` : ''}
       <div class="card rd-timed"><h3>Прочитай вслух на время</h3><div class="rd-timer-body"></div></div>`;
@@ -91,10 +91,12 @@
     const play = root.querySelector('.rd-play');
     play?.addEventListener('click', () => {
       if (play.classList.contains('on')) { TTS.stop(); return; }
-      const rows = [...textEl.querySelectorAll('.rd-line')];
+      // текст — по строкам; «Слова урока» — по одному слову с паузой (строкой подряд диктор читал их как одну фразу)
+      const parts = t.words ? [...textEl.querySelectorAll('.rw')] : [...textEl.querySelectorAll('.rd-line')];
+      const say = t.words ? parts.map((b) => lines[+b.dataset.i].words[+b.dataset.k].text) : t.lines.map((l) => l.ko);
       play.classList.add('on'); play.querySelector('span').textContent = 'Стоп';
-      TTS.speakAll(t.lines.map((l) => l.ko), (i) => {
-        rows.forEach((r, k) => r.classList.toggle('speaking', k === i));
+      TTS.speakAll(say, (i) => {
+        parts.forEach((r, k) => r.classList.toggle('speaking', k === i));
         if (i < 0) { play.classList.remove('on'); play.querySelector('span').textContent = 'Слушать'; }
       });
     });
