@@ -511,3 +511,9 @@ details { margin: 8px 0; font-size: 14px; } summary { cursor: pointer; color: va
 .rd-stats { grid-template-columns: repeat(3, 1fr); margin-bottom: 16px; }
 .sm-bars { height: 80px; }
 @media (max-width: 560px) { .rq .opts { grid-template-columns: 1fr; } .rd-ko { font-size: 20px; } .rd-stats b { font-size: 24px; } }
+.rd-bar { position: fixed; left: 12px; right: 12px; margin: 0 auto; max-width: 560px; bottom: 16px; z-index: 30; display: flex; align-items: center; gap: 10px; padding: 10px 12px 10px 16px; background: var(--sheet); border: 1px solid var(--accent); border-radius: var(--r-lg); }
+.rd-bar .rd-clock { font-size: 26px; min-width: 64px; }
+.rd-bar .rd-hint { flex: 1; min-width: 0; }
+.rd-rec { color: var(--accent); display: grid; animation: pulse 1.2s infinite; } .rd-rec .ic { width: 18px; height: 18px; }
+.rd-quiet { margin: 8px 0 0; }
+@media (max-width: 760px) { .rd-bar { bottom: calc(64px + env(safe-area-inset-bottom)); } }

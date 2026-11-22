@@ -64,6 +64,11 @@ const ROUNDS = 6; // вопросы случайные: каждый генер�
       if (q.kind === 'build' && q.answerToks && q.answerToks.some((x) => !q.tokens.includes(x))) errors.add(`${where}: плашек ответа нет среди плашек`);
     }
   }
+  // один ключ — одно задание: иначе «Мои ошибки» и повторение путают два разных вопроса
+  for (const mode of ['read', 'mix']) {
+    const ks = Practice.buildPool(mode, nums).map((it) => it.key + '|' + it.types.join());
+    ks.filter((k, i) => ks.indexOf(k) !== i).forEach((k) => errors.add(`${mode}: ключ задания повторяется ${k.split('|')[0]}`));
+  }
   // Тексты для чтения: каждое слово находится в словаре (или в names текста) и пройдено не позже урока текста
   const seenIds = new Set();
   for (const t of DB.texts(nums)) {

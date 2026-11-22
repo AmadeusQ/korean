@@ -10,13 +10,16 @@
   let stopActive = null; // распознавание или таймер текущего экрана: останавливаем при уходе со страницы
   const once = (fn) => { let done = false; return (...a) => { if (!done) { done = true; fn(...a); } }; };
 
-  // последний и лучший результат по тексту (лучший — среди прочитанных вслух без пропусков от 80% или про себя)
+  // Замер засчитан: вслух расслышано от 80% слов. «Про себя» — отдельный счёт: так читают быстрее, и рекорд вслух иначе не побить
+  const counted = (r) => r.acc >= 80;
+  const silent = (r) => r.acc < 0;
+  // последний результат по тексту и лучший — отдельно вслух и про себя
   function stat(id) {
     const rs = Store.reads(id); if (!rs.length) return null;
-    const good = rs.filter((r) => r.acc < 0 || r.acc >= 80);
-    return { last: rs[rs.length - 1], best: good.length ? Math.max(...good.map((r) => r.spm)) : null, n: rs.length };
+    const best = (f) => { const xs = rs.filter(f); return xs.length ? Math.max(...xs.map((r) => r.spm)) : null; };
+    return { last: rs[rs.length - 1], best: best(counted), bestSilent: best(silent), n: rs.length };
   }
-  const resLabel = (r) => `${r.spm} слог/мин${r.acc >= 0 ? ` · ${r.acc}%` : ''}`;
+  const resLabel = (r) => `${r.spm} слог/мин${r.acc >= 0 ? ` · ${r.acc}%` : ' · про себя'}`;
 
   // ---------- список текстов ----------
   function list(root) {
@@ -39,19 +42,21 @@
 
   // Скорость чтения вслух: последние 30 прочтений столбиками
   function speedCard(compact) {
-    const rs = Store.reads().filter((r) => r.acc < 0 || r.acc >= 60).slice(-30);
+    const all = Store.reads(), aloud = all.filter(counted), quiet = all.filter(silent);
+    const rs = (aloud.length ? aloud : quiet).slice(-30), mode = aloud.length ? 'вслух' : 'про себя';
     if (!rs.length) return compact ? '' : '<div class="card"><h3>Скорость чтения</h3><p class="muted sm">Пока нет замеров. Прочитай любой текст вслух на время в разделе <a class="link" href="#/read">Чтение</a>.</p></div>';
     const top = Math.max(...rs.map((r) => r.spm), 1), last = rs[rs.length - 1], best = Math.max(...rs.map((r) => r.spm));
     const first = rs.slice(0, Math.min(3, rs.length)), avg = (xs) => Math.round(xs.reduce((a, r) => a + r.spm, 0) / xs.length);
     const growth = rs.length >= 6 ? avg(rs.slice(-3)) - avg(first) : null;
-    return `<div class="card"><div class="card-head"><h3>Скорость чтения</h3>${compact ? '' : '<a class="link sm" href="#/read">Тексты →</a>'}</div>
+    return `<div class="card"><div class="card-head"><h3>Скорость чтения <span class="muted sm">· ${mode}</span></h3>${compact ? '' : '<a class="link sm" href="#/read">Тексты →</a>'}</div>
       <section class="stats rd-stats">
         <div><b>${last.spm}</b><span>слогов в минуту в прошлый раз</span></div>
         <div><b>${best}</b><span>лучшая скорость</span></div>
         ${growth !== null ? `<div><b>${growth > 0 ? '+' : ''}${growth}</b><span>к первым замерам</span></div>` : ''}
       </section>
       <div class="bars sm-bars" role="img" aria-label="Скорость чтения по замерам">${rs.map((r) => `<i class="full" style="height:${(r.spm / top) * 100}%" title="${new Date(r.at).toLocaleDateString('ru')}: ${r.spm} слог/мин${r.acc >= 0 ? `, расслышано ${r.acc}%` : ', про себя'}"></i>`).join('')}</div>
-      <div class="bars-x muted xs"><span>первый замер</span><span>последний</span></div></div>`;
+      <div class="bars-x muted xs"><span>первый замер</span><span>последний</span></div>
+      ${aloud.length && quiet.length ? `<p class="muted xs rd-quiet">Про себя: последний раз ${quiet[quiet.length - 1].spm}, лучшая ${Math.max(...quiet.map((r) => r.spm))} слог/мин</p>` : ''}</div>`;
   }
 
   // ---------- текст ----------
@@ -67,7 +72,7 @@
       <div class="row rd-tools">
         ${TTS.available() ? `<button type="button" class="btn ghost sm rd-play">${icon('speaker')} <span>Слушать</span></button>` : ''}
         <label class="toggle"><input type="checkbox" class="rd-ru-on"> Перевод</label>
-        ${s ? `<span class="muted xs">Прочитан ${s.n} ${s.n % 10 === 1 && s.n % 100 !== 11 ? 'раз' : s.n % 10 >= 2 && s.n % 10 <= 4 && (s.n % 100 < 10 || s.n % 100 >= 20) ? 'раза' : 'раз'}${s.best ? ` · лучшая скорость ${s.best} слог/мин` : ''}</span>` : ''}
+        ${s ? `<span class="muted xs">Прочитан ${s.n} ${s.n % 10 === 1 && s.n % 100 !== 11 ? 'раз' : s.n % 10 >= 2 && s.n % 10 <= 4 && (s.n % 100 < 10 || s.n % 100 >= 20) ? 'раза' : 'раз'}${s.best ? ` · лучшая вслух ${s.best} слог/мин` : s.bestSilent ? ` · лучшая про себя ${s.bestSilent} слог/мин` : ''}</span>` : ''}
       </div>
       <div class="card rd-text ${t.words ? 'rd-words' : ''}">${lines.map((l, i) => `<div class="rd-line" data-i="${i}">
         ${l.who ? `<span class="who ko">${esc(l.who)}</span>` : ''}
@@ -153,10 +158,15 @@
     const run = (useMic) => {
       textEl.querySelectorAll('.rw.miss').forEach((x) => x.classList.remove('miss'));
       TTS.stop();
-      el.innerHTML = `<div class="rd-clock serif">0:00</div><p class="sm muted">${useMic ? 'Читай вслух. Закончишь — нажми «Готово».' : 'Читай. Закончишь — нажми «Готово».'}</p>
-        <div class="row"><button type="button" class="btn rd-done">Готово</button><button type="button" class="btn ghost rd-cancel">Отмена</button></div>`;
+      el.innerHTML = '<p class="sm muted">Идёт замер…</p>';
+      // часы и «Готово» прибиты к низу экрана: текст длинный, а карточка замера под вопросами
+      document.querySelectorAll('.rd-bar').forEach((x) => x.remove());
+      const bar = document.createElement('div'); bar.className = 'rd-bar'; bar.setAttribute('role', 'status');
+      bar.innerHTML = `<span class="rd-clock serif">0:00</span>${useMic ? `<span class="rd-rec">${icon('mic')}</span>` : ''}<span class="rd-hint sm muted">${useMic ? 'Читай вслух' : 'Читай'}</span>
+        <button type="button" class="btn ghost sm rd-cancel">Отмена</button><button type="button" class="btn sm rd-done">Готово</button>`;
+      document.body.appendChild(bar);
       textEl.scrollIntoView({ block: 'start', behavior: 'smooth' });
-      const t0 = Date.now(), clock = el.querySelector('.rd-clock');
+      const t0 = Date.now(), clock = bar.querySelector('.rd-clock');
       const tick = setInterval(() => { const s = Math.floor((Date.now() - t0) / 1000); clock.textContent = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; }, 250);
       let heard = [], rec = null, live = true, err = '';
       // распознавание на телефоне само останавливается после паузы: перезапускаем, пока читаешь
@@ -164,13 +174,18 @@
         if (!useMic || !live) return;
         rec = new SR(); rec.lang = 'ko-KR'; rec.continuous = true; rec.interimResults = false; rec.maxAlternatives = 1;
         rec.onresult = (ev) => { for (let i = ev.resultIndex; i < ev.results.length; i++) if (ev.results[i].isFinal) heard.push(ev.results[i][0].transcript); };
-        rec.onerror = (ev) => { if (ev.error === 'not-allowed' || ev.error === 'service-not-allowed') { err = 'Нет доступа к микрофону — разреши его в браузере.'; live = false; } };
+        // no-speech и aborted — обычные паузы, после них перезапуск; остальное без толку повторять
+        rec.onerror = (ev) => {
+          const why = { 'not-allowed': 'Нет доступа к микрофону — разреши его в браузере.', 'service-not-allowed': 'Нет доступа к микрофону — разреши его в браузере.',
+            'audio-capture': 'Микрофон не найден.', network: 'Распознаванию речи нужен интернет.', 'language-not-supported': 'Браузер не распознаёт корейскую речь.' }[ev.error];
+          if (why) { err = why; live = false; bar.querySelector('.rd-hint').textContent = why; }
+        };
         rec.onend = () => { rec = null; if (live) setTimeout(listen, 50); };
         try { rec.start(); } catch { rec = null; }
       };
       listen();
       const finish = (save) => {
-        live = false; clearInterval(tick); stopActive = null;
+        live = false; clearInterval(tick); stopActive = null; bar.remove();
         const ms = Date.now() - t0;
         const after = () => {
           if (!save) return idle();
@@ -183,22 +198,16 @@
           if (useMic) {
             const got = onlyHangul(heard.join(' '));
             if (!got) return idle('<p class="sm rd-err">Ничего не расслышал. Проверь микрофон и попробуй ещё раз.</p>');
-            // слово засчитано, если его слоги есть в распознанном (окончания и имена распознаются неровно — достаточно основы)
-            const btns = [...textEl.querySelectorAll('.rw')];
-            let okN = 0;
-            btns.forEach((b) => {
-              const w = lines[+b.dataset.i].words[+b.dataset.k], full = onlyHangul(w.text), base = onlyHangul(w.base);
-              const ok = got.includes(full) || (base.length >= 2 && got.includes(base));
-              if (ok) okN++; else b.classList.add('miss');
-            });
-            acc = Math.round((okN / Math.max(1, btns.length)) * 100);
+            const r = score(got, [...textEl.querySelectorAll('.rw')], lines);
+            acc = r.acc; r.miss.forEach((b) => b.classList.add('miss'));
           }
           const prev = stat(t.id);
           Store.addRead(t.id, spm, acc);
-          const better = prev?.best && (acc < 0 || acc >= 80) ? spm - prev.best : null;
+          const prevBest = acc < 0 ? prev?.bestSilent : prev?.best;
+          const better = prevBest && (acc < 0 || acc >= 80) ? spm - prevBest : null;
           const m = Math.floor(ms / 60000), sec = Math.round((ms % 60000) / 1000);
           idle(`<div class="rd-result"><div><b class="serif">${spm}</b><span>слогов в минуту</span></div>${acc >= 0 ? `<div><b class="serif">${acc}%</b><span>слов расслышано</span></div>` : ''}<div><b class="serif">${m ? m + ' мин ' : ''}${sec} с</b><span>время</span></div></div>
-            ${better !== null ? `<p class="sm">${better > 0 ? `Быстрее лучшего раза на ${better} слог/мин.` : better === 0 ? 'Как в лучший раз.' : `Лучший раз был ${prev.best} слог/мин.`}</p>` : ''}
+            ${better !== null ? `<p class="sm">${better > 0 ? `Быстрее лучшего раза на ${better} слог/мин.` : better === 0 ? 'Как в лучший раз.' : `Лучший раз был ${prevBest} слог/мин.`}</p>` : ''}
             ${acc >= 0 && acc < 100 ? '<p class="sm muted">Слова, которые я не расслышал, подчёркнуты в тексте красным: прочитай их ещё раз с диктором.</p>' : ''}
             ${acc >= 0 && acc < 80 ? '<p class="sm muted">Скорость засчитывается в рекорд, когда расслышано от 80% слов.</p>' : ''}`);
         };
@@ -208,14 +217,35 @@
         else done();
       };
       const fin = once(finish);
-      el.querySelector('.rd-done').addEventListener('click', () => fin(true));
-      el.querySelector('.rd-cancel').addEventListener('click', () => fin(false));
-      stopActive = () => { live = false; clearInterval(tick); try { rec?.abort(); } catch { /* уже остановлено */ } };
+      bar.querySelector('.rd-done').addEventListener('click', () => fin(true));
+      bar.querySelector('.rd-cancel').addEventListener('click', () => fin(false));
+      stopActive = () => { live = false; clearInterval(tick); bar.remove(); try { rec?.abort(); } catch { /* уже остановлено */ } };
     };
     idle();
   }
 
+  // Сколько слов текста расслышано. Идём по тексту по порядку и ищем слово в распознанном после предыдущего найденного
+  // (не дальше 12 слогов вперёд): иначе частые 저는, 제, 사람이에요 засчитывались бы, даже если прочитана половина текста.
+  // Окончания распознаются неровно — достаточно основы от двух слогов. Имена и числа не считаем: их пишут как попало (피에르, 1번).
+  function score(got, btns, lines) {
+    let pos = 0, okN = 0, n = 0; const miss = [];
+    for (const b of btns) {
+      const w = lines[+b.dataset.i].words[+b.dataset.k];
+      if (w.name || w.entry?.t === 'num') continue;
+      n++;
+      const full = onlyHangul(w.text), base = onlyHangul(w.base);
+      let hit = -1, len = 0;
+      for (const c of [full, base.length >= 2 ? base : '']) {
+        if (!c) continue;
+        const at = got.indexOf(c, pos);
+        if (at >= 0 && at - pos <= 12) { hit = at; len = c.length; break; }
+      }
+      if (hit >= 0) { okN++; pos = hit + len; } else miss.push(b);
+    }
+    return { acc: Math.round((okN / Math.max(1, n)) * 100), miss };
+  }
+
   function stop() { if (stopActive) { stopActive(); stopActive = null; } }
 
-  window.Reading = { list, text, speedCard, stop };
+  window.Reading = { list, text, speedCard, stop, busy: () => !!stopActive, score };
 })();
