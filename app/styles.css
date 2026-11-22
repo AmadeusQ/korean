@@ -406,6 +406,7 @@ body.in-session .topbar { display: none; }
 .chat { width: 100%; max-width: 440px; display: flex; flex-direction: column; gap: 8px; text-align: left; }
 .msg { display: flex; gap: 10px; align-items: baseline; }
 .msg .who { flex: 0 0 40px; padding: 0; }
+.msg .say { flex: none; align-self: center; }
 .msg .ko { font-size: 19px; background: var(--paper); border: 1px solid var(--line); padding: 6px 12px; border-radius: var(--r); }
 .reading .msg .ko { font-size: 17px; }
 .slow-say { font-size: 14px; }

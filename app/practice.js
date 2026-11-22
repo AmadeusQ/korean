@@ -307,7 +307,7 @@
   function readPrompt(d) {
     const text = d.lines.map((l) => l.ko).join(' ');
     const listen = TTS.available() && Math.random() < 0.4;
-    const chat = `<div class="chat reading">${d.lines.map((l) => `<div class="msg">${l.who ? `<span class="who">${esc(l.who)}</span>` : ''}<span class="ko">${esc(l.ko)}</span></div>`).join('')}</div>`;
+    const chat = `<div class="chat reading">${d.lines.map((l) => `<div class="msg">${l.who ? `<span class="who">${esc(l.who)}</span>` : ''}<span class="ko">${esc(l.ko)}</span>${sayBtn(l.ko, 'sm')}</div>`).join('')}</div>`;
     const btns = `<div class="row">${sayBtn(text)}<button type="button" class="link slow-say" data-say="${esc(text)}" data-slow="1">Медленнее</button></div>`;
     return { listen, text, html: listen ? `${btns}<details class="show-text"><summary>Показать текст</summary>${chat}</details>` : chat + btns };
   }
@@ -317,6 +317,7 @@
   }
 
   // newLeft: сколько новых слов ещё можно дать сегодня; лишние новые уходят в конец и берутся, только если больше нечего
+  const RECENT = 3 * 3600 * 1000;
   function choose(pool, n, mode, newLeft = Infinity) {
     const now = Date.now();
     const score = (it) => {
@@ -333,15 +334,19 @@
       late = fresh.slice(newLeft);
       ranked = ranked.filter((it) => !late.includes(it));
     }
+    // Только что пройденное (верно, срок не настал, ответ за последние 3 часа) идёт после новых сверх лимита:
+    // иначе, когда новые на сегодня кончились, вторая тренировка по уроку повторяла первую слово в слово.
+    const recent = (it) => { const s = Store.get(it.key); return !!s && s.due > now && now - (s.last || 0) < RECENT; };
+    const order = [...ranked.filter((it) => !recent(it)), ...late, ...ranked.filter(recent)];
     // хангыль: четверть тренировки, пока буквы новые, и всё меньше по мере освоения (не меньше 5%)
     const hm = DB.mastery(ranked.filter((it) => it.group === 'hangul').map((it) => it.key));
     const hq = Math.max(0.05, 0.25 * (1 - hm));
     const quotas = mode === 'mix' ? { words: 0.45 + (0.25 - hq), hangul: hq, grammar: 0.15, build: 0.15 } : null;
     const out = [];
     if (quotas) {
-      for (const [g, q] of Object.entries(quotas)) out.push(...ranked.filter((it) => it.group === g).slice(0, Math.round(n * q)));
+      for (const [g, q] of Object.entries(quotas)) out.push(...order.filter((it) => it.group === g).slice(0, Math.round(n * q)));
     }
-    for (const it of [...ranked, ...late]) { if (out.length >= n) break; if (!out.includes(it)) out.push(it); }
+    for (const it of order) { if (out.length >= n) break; if (!out.includes(it)) out.push(it); }
     // Повторение идёт первым, но не забирает всю сессию: до трети мест — новым словам (в пределах лимита на день).
     // Иначе на следующий день вчерашние слова занимали все места, а новые не попадались вовсе.
     const want = Math.min(Math.ceil(n * 0.3), newLeft, fresh.length - late.length);
@@ -624,7 +629,7 @@
       const near = pool.filter((x) => Math.abs(x.ko.length - line.ko.length) <= 8);
       const ds = shuffle(near.length >= 3 ? near : pool).slice(0, 3);
       return { kind: 'choice', label: `${d.title}`, autoplay: prev[prev.length - 1]?.ko,
-        prompt: `<div class="chat">${prev.map((l) => `<div class="msg"><span class="who">${esc(l.who || '')}</span><span class="ko">${esc(l.ko)}</span></div>`).join('')}
+        prompt: `<div class="chat">${prev.map((l) => `<div class="msg"><span class="who">${esc(l.who || '')}</span><span class="ko">${esc(l.ko)}</span>${sayBtn(l.ko, 'sm')}</div>`).join('')}
           <div class="msg me"><span class="who">${esc(line.who || '')}</span><span class="dots-typing">…</span></div></div>
           <div class="hint">Что ответит ${esc(line.who || 'собеседник')}? По смыслу: «${esc(line.ru)}»</div>`,
         options: shuffle([line, ...ds]).map((x) => ({ text: bare(x.ko), ok: x === line, ko: true })), sayAfter: line.ko,
