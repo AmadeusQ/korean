@@ -5,7 +5,7 @@
   const INTERVALS = [0, 1, 2, 4, 8, 16, 32].map((d) => d * DAY); // по коробкам 0..6
   const MAX_BOX = INTERVALS.length - 1;
 
-  const empty = () => ({ items: {}, days: {}, settings: { rate: 0.85, dailyGoal: 30, newPerDay: 15, sessionLen: 15, romanize: true, typing: true, keyboard: true, theme: 'auto' }, tests: {}, custom: [], meta: {}, notes: {} });
+  const empty = () => ({ items: {}, days: {}, settings: { rate: 0.85, dailyGoal: 30, newPerDay: 15, sessionLen: 15, romanize: true, typing: true, keyboard: true, theme: 'auto' }, tests: {}, custom: [], meta: {}, notes: {}, reads: [] });
   // Всё, что приходит из localStorage, ссылки переноса или файла, приводим к ожидаемым типам:
   // числа — числами, строки — строками, лишнее выбрасываем. Иначе чужая ссылка могла бы внедрить разметку.
   const int = (v, min, max) => { const n = Math.round(Number(v)); return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : min; };
@@ -48,6 +48,13 @@
     for (const [k, v] of Object.entries(notes || {}).slice(0, 3000)) { const t = str(v, 200).trim(); if (k.length <= 60 && /[가-힣]/.test(k) && t) out[k] = t; }
     return out;
   }
+  // Чтение текстов на время: t — id текста, spm — слогов в минуту, acc — сколько слов расслышано, % (-1 — читал про себя)
+  const MAX_READS = 500;
+  function cleanReads(list) {
+    return (Array.isArray(list) ? list : []).filter((r) => r && typeof r === 'object' && typeof r.t === 'string' && /^[\w-]{1,40}$/.test(r.t))
+      .map((r) => ({ t: r.t, spm: int(r.spm, 1, 2000), acc: int(r.acc, -1, 100), at: Math.min(num(r.at), Date.now() + DAY) }))
+      .filter((r) => r.at > 0).sort((a, b) => a.at - b.at).slice(-MAX_READS);
+  }
   // рекорд «Найди пары» в мс: быстрее 3 секунд не бывает, а время из будущего не должно навсегда скрыть напоминание о копии
   const time = (v) => Math.min(num(v), Date.now() + 31 * DAY) || undefined;
   function cleanMeta(meta) { const m = meta || {}; return { matchBest: num(m.matchBest) ? int(m.matchBest, 3000, 36e5) : undefined, timedBest: int(m.timedBest, 0, 1e4) || undefined, backupAt: time(m.backupAt), backupHide: time(m.backupHide), intro: cleanIntro(m.intro) }; }
@@ -55,7 +62,7 @@
     const d = empty().settings, x = Object.assign({}, d, s || {});
     return { rate: Math.min(1.5, Math.max(0.5, num(x.rate) || d.rate)), dailyGoal: int(x.dailyGoal, 5, 300), newPerDay: int(x.newPerDay, 3, 100), sessionLen: [10, 15, 25].includes(+x.sessionLen) ? +x.sessionLen : 15, romanize: !!x.romanize, typing: !!x.typing, keyboard: !!x.keyboard, theme: ['auto', 'light', 'dark'].includes(x.theme) ? x.theme : 'auto' };
   }
-  const clean = (s) => ({ items: cleanItems(s.items), days: cleanDays(s.days), tests: cleanTests(s.tests), custom: cleanCustom(s.custom), meta: cleanMeta(s.meta), notes: cleanNotes(s.notes), settings: cleanSettings(s.settings) });
+  const clean = (s) => ({ items: cleanItems(s.items), days: cleanDays(s.days), tests: cleanTests(s.tests), custom: cleanCustom(s.custom), meta: cleanMeta(s.meta), notes: cleanNotes(s.notes), reads: cleanReads(s.reads), settings: cleanSettings(s.settings) });
 
   let state;
   try { state = clean(JSON.parse(localStorage.getItem(KEY) || '{}')); } catch { state = empty(); }
@@ -178,6 +185,7 @@
       for (const [n, t] of Object.entries(other.tests)) { const m = state.tests[n]; if (!m || t.best > m.best) state.tests[n] = t; }
       for (const w of other.custom) if (!state.custom.some((x) => x.ko === w.ko)) state.custom.push(w);
       for (const [k, v] of Object.entries(other.notes)) if (!state.notes[k]) state.notes[k] = v;
+      const seen = new Set(state.reads.map((r) => r.t + r.at)); state.reads = state.reads.concat(other.reads.filter((r) => !seen.has(r.t + r.at)));
       if (other.meta.intro?.name && !state.meta?.intro?.name) { state.meta = state.meta || {}; state.meta.intro = other.meta.intro; }
       state = clean(state); // общие пределы (число своих слов, подсказок) и после объединения
       // рекорды: в «Найди пары» лучше меньшее время, в «5 минутах» — больше ответов
@@ -186,10 +194,18 @@
       if (om.timedBest && om.timedBest > (state.meta.timedBest || 0)) state.meta.timedBest = om.timedBest;
       save();
     },
+    reads: (t) => (t ? state.reads.filter((r) => r.t === t) : state.reads),
+    // прочитал текст: в журнал скорости и в повторение (ключ txt:<id>, перечитать по интервалам; плохо расслышано — раньше)
+    addRead(t, spm, acc) {
+      const r = cleanReads([{ t, spm, acc, at: Date.now() }])[0]; if (!r) return null;
+      state.reads.push(r); state.reads = cleanReads(state.reads);
+      answer('txt:' + r.t, r.acc < 0 || r.acc >= 80);
+      return r;
+    },
     keys: () => Object.keys(state.items),
     // Компактная строка для ссылки переноса (без настроек)
     async pack() {
-      const json = JSON.stringify({ items: state.items, days: state.days, tests: state.tests || {}, custom: state.custom || [], notes: state.notes || {}, meta: { matchBest: state.meta?.matchBest, timedBest: state.meta?.timedBest, intro: state.meta?.intro } });
+      const json = JSON.stringify({ items: state.items, days: state.days, tests: state.tests || {}, custom: state.custom || [], notes: state.notes || {}, reads: state.reads || [], meta: { matchBest: state.meta?.matchBest, timedBest: state.meta?.timedBest, intro: state.meta?.intro } });
       let bytes = new TextEncoder().encode(json), z = '0';
       if (window.CompressionStream) { bytes = new Uint8Array(await new Response(new Blob([bytes]).stream().pipeThrough(new CompressionStream('gzip'))).arrayBuffer()); z = '1'; }
       let bin = ''; bytes.forEach((b) => (bin += String.fromCharCode(b)));

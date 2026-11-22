@@ -14,13 +14,17 @@
   const ENDINGS = new Set(['', '은', '는', '이', '가', '을', '를', '의', '도', '에', '에서', '에게', '한테', '하고', '이랑', '랑', '과', '와', '만', '로', '으로', '요', '이요',
     '이에요', '예요', '이에요?', '예요?', '이세요', '세요', '입니다', '입니까', '이야', '야', '이고', '고', '이지만', '지만', '씨', '씨는', '씨가', '씨도', '씨예요', '씨의']);
 
+  // Окончания в текстах для чтения: что показать при нажатии на слово (длинные раньше коротких)
+  const SUFFIX = [['이에요', 'связка «есть, это» (после согласной)'], ['예요', 'связка «есть, это» (после гласной)'], ['은요', '«а …?» — встречный вопрос'], ['는요', '«а …?» — встречный вопрос'],
+    ['은', 'частица темы: о ком или о чём речь (после согласной)'], ['는', 'частица темы: о ком или о чём речь (после гласной)'], ['이', 'частица подлежащего (после согласной)'], ['가', 'частица подлежащего (после гласной)']];
+
   const DB = {
     lessons, entries: [], byKo: new Map(),
     async load() {
       for (const id of window.LESSON_FILES) await loadScript(`data/lessons/${id}.js`);
       lessons.sort((a, b) => a.number - b.number);
       for (const l of lessons) {
-        l.words = l.words || []; l.phrases = l.phrases || []; l.grammar = l.grammar || []; l.dialogues = l.dialogues || []; l.hangul = l.hangul || [];
+        l.words = l.words || []; l.phrases = l.phrases || []; l.grammar = l.grammar || []; l.dialogues = l.dialogues || []; l.hangul = l.hangul || []; l.texts = l.texts || [];
         const add = (w, kind) => {
           const prev = DB.byKo.get(w.ko);
           if (prev) { if (!prev.lessons.includes(l.number)) prev.lessons.push(l.number); return; }
@@ -63,6 +67,44 @@
       return [...set];
     },
     grammar(nums) { return lessons.filter((l) => nums.includes(l.number)).flatMap((l) => l.grammar.map((g) => ({ ...g, lesson: l.number }))); },
+    // Тексты для чтения: написанные к уроку (texts) и «Слова урока N» на скорость — новые слова урока строками по 6
+    texts(nums) {
+      return lessons.filter((l) => nums.includes(l.number)).flatMap((l) => {
+        const own = l.texts.map((t) => ({ ...t, lesson: l.number }));
+        const words = DB.entries.filter((e) => e.lesson === l.number && e.kind === 'word' && /^[가-힣]+$/.test(e.ko)).slice(0, 30);
+        if (words.length < 8) return own;
+        const lines = [];
+        for (let i = 0; i < words.length; i += 6) { const ch = words.slice(i, i + 6); lines.push({ ko: ch.map((e) => e.ko).join(' '), ru: ch.map((e) => e.ru.split(/[,;(]/)[0].trim()).join(', ') }); }
+        return [...own, { id: 'words-' + l.number, title: 'Слова урока ' + l.number, words: true, lesson: l.number, lines }];
+      });
+    },
+    text: (id) => DB.texts(DB.allNums()).find((t) => t.id === id) || null,
+    // Строка текста по словам для чтения с подсказками: основа из словаря + окончание (사람이에요 → 사람 + 이에요).
+    // Два слова подряд, если это одно слово словаря (이 사람은 → 이 사람 + 은). names — имена из текста.
+    parseLine(ko, names = {}) {
+      const raw = ko.split(/\s+/).filter(Boolean), out = [];
+      const word = (b) => { const e = DB.byKo.get(b); return e && e.kind === 'word' ? e : null; };
+      const find = (r, span) => {
+        const bare = r.replace(/[.,!?…«»"]/g, '');
+        if (names[bare]) return { base: bare, ru: names[bare] + ' (имя)', name: true };
+        if (word(bare)) return { base: bare, ru: word(bare).ru, entry: word(bare) };
+        for (const [suf, about] of SUFFIX) {
+          if (!bare.endsWith(suf) || bare.length <= suf.length) continue;
+          const b = bare.slice(0, -suf.length);
+          if (names[b]) return { base: b, ru: names[b] + ' (имя)', name: true, suf, sufRu: about };
+          if (word(b)) return { base: b, ru: word(b).ru, entry: word(b), suf, sufRu: about };
+        }
+        if (span) return null;
+        const p = DB.byKo.get(r) || DB.byKo.get(bare);
+        return p ? { base: p.ko, ru: p.ru, entry: p } : null;
+      };
+      for (let i = 0; i < raw.length; i++) {
+        const two = i + 1 < raw.length && find(raw[i] + ' ' + raw[i + 1], true);
+        if (two) { out.push({ text: raw[i] + ' ' + raw[i + 1], ...two }); i++; continue; }
+        out.push({ text: raw[i], ...(find(raw[i]) || { base: raw[i].replace(/[.,!?…«»"]/g, ''), ru: '' }) });
+      }
+      return out;
+    },
     dialogues(nums) { return lessons.filter((l) => nums.includes(l.number)).flatMap((l) => l.dialogues.map((d) => ({ ...d, lesson: l.number }))); },
     // Задания, которые урок открывает впервые: его новые слова и фразы, новые буквы хангыля
     lessonKeys(n) {

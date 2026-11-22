@@ -477,3 +477,37 @@ details { margin: 8px 0; font-size: 14px; } summary { cursor: pointer; color: va
 .note-field textarea { font: inherit; font-size: 15px; padding: 8px 10px; border: 1px solid var(--line); border-radius: var(--r); background: var(--paper); color: inherit; resize: vertical; }
 .hard { color: var(--accent-2); font-weight: 600; } /* красный только для ошибок и печатей */
 .only-hard.on { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
+
+/* ---------- чтение ---------- */
+.rd-prev { display: block; color: var(--ink-2); font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rd-row .mode-t { min-width: 0; }
+.rd-due { color: var(--accent); font-weight: 600; }
+.rd-title { margin-bottom: 12px; }
+.rd-tools { margin-bottom: 12px; } .rd-tools .toggle { margin: 0; } .rd-play.on { border-color: var(--accent); color: var(--accent); }
+.rd-text { padding: 16px 20px; }
+.rd-line { display: flex; gap: 10px; align-items: flex-start; padding: 8px 0; border-bottom: 1px solid var(--line-2); }
+.rd-line:last-child { border-bottom: 0; }
+.rd-line .who { padding-top: 6px; }
+.rd-line .say { margin-top: 2px; }
+.rd-body { flex: 1; min-width: 0; }
+.rd-ko { margin: 0; font-size: 22px; line-height: 1.7; }
+.rd-words .rd-ko { word-spacing: .4em; }
+.rw { font: inherit; color: inherit; background: none; border: 0; padding: 0 1px; border-radius: 4px; border-bottom: 1px dotted var(--line); cursor: pointer; }
+.rw:hover { background: var(--accent-soft); }
+.rw.miss { border-bottom: 2px solid var(--red); }
+.rd-tr { display: none; margin: 0; color: var(--muted); font-size: 14px; }
+.show-ru .rd-tr { display: block; }
+.rd-line.speaking .rd-ko { color: var(--accent); }
+.rd-big { font-size: 34px; }
+.rd-parts { margin: 8px 0 12px; display: grid; gap: 6px; } .rd-parts .ko { font-size: 19px; }
+.rq { padding: 12px 0; border-bottom: 1px solid var(--line-2); } .rq:last-child { border-bottom: 0; }
+.rq-q { margin-bottom: 8px; } .rq-q .ko { font-size: 19px; }
+.rq .opt { min-height: 48px; padding: 10px 14px; font-size: 16px; }
+.rq-ex { margin-top: 8px; font-size: 14px; } .rq-ex .ko { font-size: 16px; }
+.rd-clock { font-size: 44px; margin: 4px 0; }
+.rd-result { display: flex; flex-wrap: wrap; gap: 8px 28px; margin-bottom: 10px; }
+.rd-result b { display: block; font-size: 30px; } .rd-result span { font-size: 13px; color: var(--muted); }
+.rd-err { color: var(--red); }
+.rd-stats { grid-template-columns: repeat(3, 1fr); margin-bottom: 16px; }
+.sm-bars { height: 80px; }
+@media (max-width: 560px) { .rq .opts { grid-template-columns: 1fr; } .rd-ko { font-size: 20px; } .rd-stats b { font-size: 24px; } }

@@ -297,7 +297,7 @@
   // для режима диалога: 1–2 случайных диалога целиком, по порядку реплик
   // «Прочитай и ответь»: вопросы на понимание из dialogues[].questions
   function readItems(nums) {
-    return DB.dialogues(nums).flatMap((d) => [
+    return [...DB.dialogues(nums), ...DB.texts(nums).filter((t) => !t.words)].flatMap((d) => [
       ...(d.questions || []).map((q) => ({ group: 'build', key: 'rd:' + q.q, types: ['read'], dlg: d, rq: q })),
       // «Верно или нет» по тексту: dialogues[].facts
       ...(d.facts || []).map((f) => ({ group: 'build', key: 'tf:' + f.ko, types: ['tf'], dlg: d, fact: f })),

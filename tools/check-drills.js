@@ -64,6 +64,16 @@ const ROUNDS = 6; // вопросы случайные: каждый генер�
       if (q.kind === 'build' && q.answerToks && q.answerToks.some((x) => !q.tokens.includes(x))) errors.add(`${where}: плашек ответа нет среди плашек`);
     }
   }
+  // Тексты для чтения: каждое слово находится в словаре (или в names текста) и пройдено не позже урока текста
+  const seenIds = new Set();
+  for (const t of DB.texts(nums)) {
+    if (seenIds.has(t.id)) errors.add(`текст ${t.id}: повтор id`); seenIds.add(t.id);
+    t.lines.forEach((l) => DB.parseLine(l.ko, t.names).forEach((w) => {
+      const where = `текст ${t.id} «${l.ko}»: ${w.text}`;
+      if (!w.entry && !w.name) errors.add(`${where} — нет в словаре и в names`);
+      else if (w.entry && Math.min(...w.entry.lessons.filter((n) => n > 0)) > t.lesson) errors.add(`${where} — слово из урока ${Math.min(...w.entry.lessons)}, позже текста`);
+    }));
+  }
   // «Мои ошибки»: каждый ключ, который могут дать задания, должен находиться обратно
   const keys = new Set();
   for (const mode of Object.keys(Practice.MODES)) if (mode !== 'mistakes') Practice.buildPool(mode, nums).forEach((it) => keys.add(it.key));

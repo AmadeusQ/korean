@@ -113,10 +113,20 @@
     return `<div class="modes">
       ${nxt ? row(`#/lesson/${nxt.number}`, `제${nxt.number}과`, 'Следующий урок', `${esc(nxt.title)} · урок ${cur.number} освоен`) : ''}
       ${path.fresh ? '' : row('#/practice/mix', '오늘', 'Тренировка дня', due ? `Сначала повторение: ${plural(due, 'слово', 'слова', 'слов')}` : 'Слова, грамматика и фразы из пройденных уроков')}
+      ${path.fresh ? '' : readRow(row)}
       ${nMist ? row('#/practice/mistakes', '오답', 'Мои ошибки', `${plural(nMist, 'задание', 'задания', 'заданий')}, в ${nMist % 10 === 1 && nMist % 100 !== 11 ? 'котором' : 'которых'} ты ошибался`) : ''}
       ${cur ? row(path.fresh ? `#/lesson/${cur.number}` : `#/practice/mix?l=${cur.number}`, `제${cur.number}과`, path.fresh ? 'Начать с урока 1' : 'Текущий урок', `${esc(cur.title)}${path.fresh ? '' : ` · освоено ${pct}%`}`) : ''}
       ${cur && !path.fresh ? row(`#/practice/test?l=${cur.number}`, '시험', 'Контрольная', `По уроку ${cur.number}${test ? ` · лучший результат ${test.best}%` : cur !== DB.lessons[DB.lessons.length - 1] ? ' · от 80% откроет следующий урок' : ''}`) : ''}
     </div>`;
+  }
+
+  // «Чтение» на главной и в тренировке: сколько текстов ждут, последняя скорость
+  function readRow(row) {
+    const texts = DB.texts(DB.openNums().filter((n) => n > 0)); if (!texts.length) return '';
+    const now = Date.now(), fresh = texts.filter((t) => !Store.reads(t.id).length).length, due = texts.filter((t) => Store.isDue('txt:' + t.id, now)).length;
+    const last = Store.reads().slice(-1)[0];
+    const desc = [fresh ? `новых текстов: ${fresh}` : '', due ? `перечитать: ${due}` : '', last ? `скорость ${last.spm} слог/мин` : ''].filter(Boolean).join(' · ') || 'Тексты из пройденных слов';
+    return row('#/read', '읽기', 'Чтение', desc);
   }
 
   function modeGrid(nums) {
@@ -149,7 +159,7 @@
     const photos = DB.photos(l);
     const tabs = [
       ['overview', 'Обзор'], l.words.length && ['words', `Слова · ${l.words.length}`], l.phrases.length && ['phrases', `Фразы · ${l.phrases.length}`],
-      l.grammar.length && ['grammar', 'Грамматика'], l.dialogues.length && ['dialogues', 'Диалоги'], photos.length && ['photos', `Конспект · ${photos.length}`],
+      l.grammar.length && ['grammar', 'Грамматика'], l.dialogues.length && ['dialogues', 'Диалоги'], DB.texts([l.number]).length && ['texts', `Чтение · ${DB.texts([l.number]).length}`], photos.length && ['photos', `Конспект · ${photos.length}`],
     ].filter(Boolean);
     root.innerHTML = `
       <a class="back" href="#/lessons">${icon('back')} Все уроки</a>
@@ -213,6 +223,8 @@
       ${d.lines.map((x) => `<div class="line">${x.who ? `<span class="who ko">${esc(x.who)}</span>` : '<span class="who"></span>'}<div class="bubble"><span class="ko">${esc(x.ko)}</span><div class="ru">${esc(x.ru)}</div></div>${sayBtn(x.ko, 'sm')}</div>`).join('')}
       <button type="button" class="link play-dialog" data-d="${l.dialogues.indexOf(d)}">${icon('speaker')} <span>Прослушать по репликам</span></button></div>`).join('')
       + `<a class="btn" href="#/practice/build?l=${l.number}">Собирать фразы</a>`,
+    texts: (l) => `<div class="modes">${DB.texts([l.number]).map((t) => { const r = Store.reads(t.id).slice(-1)[0];
+      return `<a class="mode" href="#/read/${esc(t.id)}"><span class="mode-ex serif">읽기</span><span class="mode-t"><b>${esc(t.title)}</b><span>${r ? `${r.spm} слог/мин${r.acc >= 0 ? ` · ${r.acc}%` : ''}` : t.words ? 'Слова урока строками — на скорость' : 'Текст из пройденных слов'}</span></span><span class="arr">→</span></a>`; }).join('')}</div>`,
     photos: (l, photos) => `<div class="gallery">${photos.map((p, i) => `<a href="${p}" data-photo="${i}"><img src="${p}" loading="lazy" alt="Страница ${i + 1}"></a>`).join('')}</div>`,
   };
 
@@ -491,6 +503,7 @@
           <div class="chips pick">${DB.lessons.map((l) => `<button class="chip ${practiceNums.includes(l.number) ? 'on' : ''}" data-n="${l.number}">제${l.number}과 · ${esc(l.title)}</button>`).join('')}${Store.custom().length ? `<button class="chip ${practiceNums.includes(0) ? 'on' : ''}" data-n="0">Мои слова · ${Store.custom().length}</button>` : ''}</div></div>
         ${!TTS.available() ? `<div class="card warn">Корейский голос не найден, поэтому аудирование выключено. <a class="link" href="#/settings">Как включить →</a></div>` : ''}
         ${practiceNums.length ? modeGrid(practiceNums) : '<p class="muted center">Выбери хотя бы один урок</p>'}
+        <div class="modes">${readRow((href, ex, title, desc) => `<a class="mode" href="${href}"><span class="mode-ex serif">${ex}</span><span class="mode-t"><b>${title}</b><span>${desc}</span></span><span class="arr">→</span></a>`)}</div>
         ${practiceNums.length ? mistakesBlock(practiceNums) : ''}`;
       root.querySelectorAll('.pick .chip').forEach((b) => b.addEventListener('click', () => {
         const n = +b.dataset.n; practiceNums = practiceNums.includes(n) ? practiceNums.filter((x) => x !== n) : [...practiceNums, n].sort((a, b) => a - b); draw();
@@ -582,7 +595,7 @@
 
   // ---------- Прогресс ----------
   // Что считается каким разделом (по началу ключа задания)
-  const PART = [['w', 'Слова и фразы'], ['j b', 'Хангыль'], ['g', 'Грамматика'], ['build cloze tr dl rd tf shadow', 'Предложения и тексты'], ['num', 'Числа'], ['write speak', 'Прописи и произношение']];
+  const PART = [['w', 'Слова и фразы'], ['j b', 'Хангыль'], ['g', 'Грамматика'], ['build cloze tr dl rd tf shadow', 'Предложения и тексты'], ['txt', 'Чтение вслух'], ['num', 'Числа'], ['write speak', 'Прописи и произношение']];
   function progress(root) {
     const days = Store.lastDays(30), goal = Store.settings().dailyGoal;
     const top = Math.max(goal, ...days.map((d) => d.n), 1);
@@ -618,6 +631,7 @@
         <div class="bars" role="img" aria-label="Ответы за 30 дней">${days.map((d) => `<i class="${d.n >= goal ? 'full' : ''}" style="height:${(d.n / top) * 100}%" title="${d.date}: ${d.n}, верно ${d.ok}"></i>`).join('')}
           <span class="goal-line" style="bottom:${(goal / top) * 100}%"></span></div>
         <div class="bars-x muted xs"><span>${days[0].date.slice(5).split('-').reverse().join('.')}</span><span>цель ${goal}</span><span>сегодня</span></div></div>
+      ${Reading.speedCard(false)}
       <div class="card"><h3>Уроки</h3><div class="prog-legend muted xs"><i class="k"></i> знаю <i class="l"></i> учу <i></i> не начато</div>${DB.lessons.map(lessonRow).join('')}</div>
       ${parts ? `<div class="card"><h3>По разделам</h3>${parts}</div>` : ''}
       ${mistakesBlock(DB.openNums())}`;
@@ -662,5 +676,5 @@
     if (t === 'auto') document.documentElement.removeAttribute('data-theme'); else document.documentElement.dataset.theme = t;
   }
 
-  window.Views = { report, home, lessons, lesson, dict, hangul, practiceMenu, settings, importLink, intro, progress, applyTheme };
+  window.Views = { wordSheet, report, home, lessons, lesson, dict, hangul, practiceMenu, settings, importLink, intro, progress, applyTheme };
 })();
