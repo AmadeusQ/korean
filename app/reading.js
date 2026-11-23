@@ -106,7 +106,6 @@
 
   // нажатое слово: основа, окончание, как читается
   function wordPop(w) {
-    document.querySelectorAll('.sheet-wrap').forEach((x) => x.remove());
     const word = w.text.replace(/[.,!?…«»"]/g, '');
     const pr = H.pron(word);
     const box = document.createElement('div'); box.className = 'sheet-wrap';
@@ -121,12 +120,9 @@
       </div>
       ${w.entry ? '<button type="button" class="link rd-card">Карточка слова →</button>' : ''}
     </div>`;
-    const close = () => { box.remove(); document.removeEventListener('keydown', key); };
-    const key = (ev) => { if (!box.isConnected) return close(); if (ev.key === 'Escape') close(); };
-    box.addEventListener('click', (ev) => { if (ev.target === box || ev.target.closest('.sheet-x')) close(); });
-    box.querySelector('.rd-card')?.addEventListener('click', () => { close(); Views.wordSheet(w.entry); });
-    document.addEventListener('keydown', key);
-    document.body.appendChild(box);
+    const m = UI.modal(box);
+    box.addEventListener('click', (ev) => { if (ev.target === box || ev.target.closest('.sheet-x')) m.close(); });
+    box.querySelector('.rd-card')?.addEventListener('click', () => m.close().then(() => Views.wordSheet(w.entry)));
   }
 
   // ---------- вопросы по тексту (те же ключи rd:/tf:, что в «Прочитай и ответь») ----------
@@ -164,10 +160,10 @@
       // часы и «Готово» прибиты к низу экрана: текст длинный, а карточка замера под вопросами
       document.querySelectorAll('.rd-bar').forEach((x) => x.remove());
       const bar = document.createElement('div'); bar.className = 'rd-bar'; bar.setAttribute('role', 'status');
-      bar.innerHTML = `<span class="rd-clock serif">0:00</span>${useMic ? `<span class="rd-rec">${icon('mic')}</span>` : ''}<span class="rd-hint sm muted">${useMic ? 'Читай вслух' : 'Читай'}</span>
+      bar.innerHTML = `<span class="rd-clock serif" aria-hidden="true">0:00</span>${useMic ? `<span class="rd-rec">${icon('mic')}</span>` : ''}<span class="rd-hint sm muted">${useMic ? 'Читай вслух' : 'Читай'}</span>
         <button type="button" class="btn ghost sm rd-cancel">Отмена</button><button type="button" class="btn sm rd-done">Готово</button>`;
       document.body.appendChild(bar);
-      textEl.scrollIntoView({ block: 'start', behavior: 'smooth' });
+      textEl.scrollIntoView({ block: 'start', behavior: UI.smooth() });
       const t0 = Date.now(), clock = bar.querySelector('.rd-clock');
       const tick = setInterval(() => { const s = Math.floor((Date.now() - t0) / 1000); clock.textContent = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; }, 250);
       let heard = [], rec = null, live = true, err = '';

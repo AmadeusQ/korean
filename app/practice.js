@@ -737,7 +737,7 @@
           <span class="s-count"></span>
         </header>
         <div class="s-body"></div>
-        <footer class="s-foot"></footer>
+        <footer class="s-foot" aria-live="polite"></footer>
       </section>`;
     const $body = root.querySelector('.s-body'), $foot = root.querySelector('.s-foot');
     const quit = async () => {

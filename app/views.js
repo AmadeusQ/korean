@@ -199,7 +199,7 @@
     }
   }
 
-  const wordRow = (w) => { const e = DB.byKo.get(w.ko) || w; return `<div class="wrow" data-ko="${esc(w.ko)}"><div class="w-ko"><span class="ko">${esc(w.ko)}</span>${UI.rr(w.ko)}</div><div class="w-ru">${esc(w.ru)}</div><span class="wpic">${UI.pic(w.ko)}</span>${strength(e.key)}${sayBtn(w.ko, 'sm')}</div>`; };
+  const wordRow = (w) => { const e = DB.byKo.get(w.ko) || w; return `<div class="wrow" data-ko="${esc(w.ko)}" tabindex="0"><div class="w-ko"><span class="ko">${esc(w.ko)}</span>${UI.rr(w.ko)}</div><div class="w-ru">${esc(w.ru)}</div><span class="wpic">${UI.pic(w.ko)}</span>${strength(e.key)}${sayBtn(w.ko, 'sm')}</div>`; };
   const TAB = {
     overview(l) {
       const units = l.hangul.map((u) => H.UNITS[u]);
@@ -237,26 +237,26 @@
     const ok = TTS.speakAll(d.lines.map((x) => x.ko), (i) => {
       mark(i);
       if (i < 0) { btn.classList.remove('on'); label.textContent = 'Прослушать по репликам'; }
-      else lines[i].scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      else lines[i].scrollIntoView({ block: 'nearest', behavior: UI.smooth() });
     });
     if (!ok) { UI.say(''); return; }
     btn.classList.add('on'); label.textContent = 'Остановить';
   }
 
   function lightbox(photos, i) {
-    const box = document.createElement('div'); box.className = 'lightbox';
-    const draw = () => { box.innerHTML = `<img src="${photos[i]}" alt=""><button class="lb-prev" aria-label="Назад">‹</button><button class="lb-next" aria-label="Вперёд">›</button><button class="lb-close" aria-label="Закрыть">${icon('close')}</button><span class="lb-n">${i + 1} / ${photos.length}</span>`; };
+    const box = document.createElement('div'); box.className = 'lightbox'; box.setAttribute('role', 'dialog'); box.setAttribute('aria-label', 'Фото страниц урока');
+    box.innerHTML = `<img alt=""><button class="lb-prev" aria-label="Назад">‹</button><button class="lb-next" aria-label="Вперёд">›</button><button class="lb-close" aria-label="Закрыть">${icon('close')}</button><span class="lb-n"></span>`;
+    // кнопки не перерисовываем, чтобы фокус оставался на них
+    const draw = () => { box.querySelector('img').src = photos[i]; box.querySelector('.lb-n').textContent = `${i + 1} / ${photos.length}`; };
     const go = (d) => { i = (i + d + photos.length) % photos.length; draw(); };
-    const close = () => { box.remove(); document.removeEventListener('keydown', key); };
-    const key = (e) => { if (!box.isConnected) return close(); if (e.key === 'Escape') close(); if (e.key === 'ArrowLeft') go(-1); if (e.key === 'ArrowRight') go(1); };
+    draw();
+    const m = UI.modal(box, { onKey: (e) => { if (e.key === 'ArrowLeft') go(-1); if (e.key === 'ArrowRight') go(1); } });
     box.addEventListener('click', (e) => {
-      if (e.target.closest('.lb-prev')) go(-1); else if (e.target.closest('.lb-next')) go(1); else if (e.target.closest('.lb-close') || e.target === box) close();
+      if (e.target.closest('.lb-prev')) go(-1); else if (e.target.closest('.lb-next')) go(1); else if (e.target.closest('.lb-close') || e.target === box) m.close();
     });
     let x0 = null;
     box.addEventListener('touchstart', (e) => (x0 = e.touches[0].clientX), { passive: true });
     box.addEventListener('touchend', (e) => { if (x0 === null) return; const dx = e.changedTouches[0].clientX - x0; if (Math.abs(dx) > 50) go(dx < 0 ? 1 : -1); x0 = null; });
-    document.addEventListener('keydown', key);
-    draw(); document.body.appendChild(box);
   }
 
   // Карточка слова: нажатие на строку в словаре или в уроке
@@ -269,7 +269,6 @@
       ...DB.entries.filter((x) => x.kind === 'phrase'),
     ].filter((l) => l.ko !== e.ko && DB.inSentence(e.ko, l.ko) && !longer.some((x) => DB.inSentence(x.ko, l.ko)));
     const ex = UI.uniqBy(lines, (l) => l.ko).slice(0, 5);
-    document.querySelectorAll('.sheet-wrap').forEach((x) => x.remove());
     const box = document.createElement('div'); box.className = 'sheet-wrap';
     box.innerHTML = `<div class="sheet" role="dialog" aria-label="${esc(e.ko)}">
       <button class="icon-btn sheet-x" aria-label="Закрыть">${icon('close')}</button>
@@ -283,38 +282,35 @@
       ${e.mine ? '<button class="btn sm danger del-word" type="button">Удалить из моих слов</button>' : ''}
       ${ex.length ? `<h2 class="h">Встречается во фразах</h2>${ex.map((l) => `<div class="exm"><div><span class="ko">${esc(l.ko)}</span><div class="muted sm">${esc(l.ru)}</div></div>${sayBtn(l.ko, 'sm')}</div>`).join('')}` : ''}
     </div>`;
-    const close = () => { box.remove(); document.removeEventListener('keydown', key); };
-    const key = (ev) => { if (!box.isConnected) return close(); if (ev.key === 'Escape') close(); };
+    const m = UI.modal(box);
     box.querySelector('.note-in').addEventListener('input', (ev) => Store.setNote(e.ko, ev.target.value));
     box.querySelector('.del-word')?.addEventListener('click', async () => {
       if (!(await UI.ask(`Удалить «${e.ko}» из своих слов?`, 'Удалить', true))) return;
-      DB.removeCustom(e.ko); close(); UI.toast('Удалено'); if (location.hash.startsWith('#/dict')) dict(document.getElementById('view'));
+      DB.removeCustom(e.ko); await m.close(); UI.toast('Удалено'); if (location.hash.startsWith('#/dict')) dict(document.getElementById('view'));
     });
-    box.addEventListener('click', (ev) => { if (ev.target === box || ev.target.closest('.sheet-x') || ev.target.closest('a')) close(); });
-    document.addEventListener('keydown', key);
-    document.body.appendChild(box);
+    box.addEventListener('click', (ev) => { if (ev.target === box || ev.target.closest('.sheet-x')) m.close(); });
   }
   document.addEventListener('click', (ev) => {
     const r = ev.target.closest('.wrow[data-ko]');
     if (!r || ev.target.closest('.say') || document.body.classList.contains('in-session')) return;
     const e = DB.byKo.get(r.dataset.ko); if (e) wordSheet(e);
   });
+  // строка слова в фокусе (Tab): Enter или пробел открывают карточку
+  document.addEventListener('keydown', (ev) => {
+    if ((ev.key !== 'Enter' && ev.key !== ' ') || !ev.target.matches?.('.wrow[data-ko]')) return;
+    ev.preventDefault(); ev.target.click();
+  });
 
   // Правило грамматики по кнопке «Правило →» из разбора ответа
   function ruleSheet(id) {
     const g = DB.grammar(DB.allNums()).find((x) => x.id === id) || (id === Numbers.RULE.id ? Numbers.RULE : null); if (!g) return;
-    document.querySelectorAll('.sheet-wrap').forEach((x) => x.remove());
     const box = document.createElement('div'); box.className = 'sheet-wrap';
-    box.innerHTML = `<div class="sheet grammar" role="dialog"><button class="icon-btn sheet-x" aria-label="Закрыть">${icon('close')}</button>
+    box.innerHTML = `<div class="sheet grammar" role="dialog" aria-label="${esc(g.title)}"><button class="icon-btn sheet-x" aria-label="Закрыть">${icon('close')}</button>
       <div class="g-head"><h3 class="serif">${esc(g.title)}</h3><span class="muted">${esc(g.short || '')}</span></div>
       ${g.body.map((p) => `<p>${p}</p>`).join('')}
       <div class="examples">${g.examples.map((x) => `<div class="exm"><div><span class="ko">${esc(x.ko)}</span><div class="muted sm">${esc(x.ru)}</div></div>${sayBtn(x.ko, 'sm')}</div>`).join('')}</div></div>`;
-    const close = () => { box.remove(); document.removeEventListener('keydown', key, true); };
-    // окно могли убрать без close() (переход по ссылке, новое окно): тогда обработчик просто снимается и Escape не глотает
-    const key = (ev) => { if (!box.isConnected) return close(); if (ev.key === 'Escape') { ev.stopPropagation(); close(); } };
-    box.addEventListener('click', (ev) => { if (ev.target === box || ev.target.closest('.sheet-x')) close(); });
-    document.addEventListener('keydown', key, true);
-    document.body.appendChild(box);
+    const m = UI.modal(box);
+    box.addEventListener('click', (ev) => { if (ev.target === box || ev.target.closest('.sheet-x')) m.close(); });
   }
   document.addEventListener('click', (ev) => { const b = ev.target.closest('[data-rule]'); if (b) { ev.preventDefault(); ruleSheet(b.dataset.rule); } });
 
@@ -324,7 +320,6 @@
   const REPORT_FIELD = 'entry.1084018497';
   // context — что приложится к сообщению: урок, задание, ответы (пишущий видит это под «Что ещё отправится»)
   function report(context) {
-    document.querySelectorAll('.sheet-wrap').forEach((x) => x.remove());
     const box = document.createElement('div'); box.className = 'sheet-wrap';
     box.innerHTML = `<form class="sheet report-sheet" role="dialog" aria-label="Сообщить об ошибке"><button type="button" class="icon-btn sheet-x" aria-label="Закрыть">${icon('close')}</button>
       <h3>Сообщить об ошибке</h3>
@@ -332,10 +327,9 @@
       <details class="rep-ctx"><summary class="muted xs">Что ещё отправится</summary><pre class="xs">${esc(context)}</pre></details>
       <div class="row"><button class="btn">Отправить</button><button type="button" class="btn ghost rep-cancel">Отмена</button></div></form>`;
     const form = box.querySelector('form'), ta = box.querySelector('.rep-in');
-    const close = () => { box.remove(); document.removeEventListener('keydown', key, true); };
-    // клавиши в окне не отдаём тренировке: Enter в поле не должен листать вопрос, цифры — выбирать вариант
-    const key = (ev) => { if (!box.isConnected) return close(); if (!box.contains(ev.target) && ev.key !== 'Escape') return; ev.stopPropagation(); if (ev.key === 'Escape') close(); };
-    box.addEventListener('click', (ev) => { if (ev.target === box || ev.target.closest('.sheet-x, .rep-cancel')) close(); });
+    // клавиши в окне не доходят до тренировки (UI.modal): Enter в поле не листает вопрос, цифры не выбирают вариант
+    const m = UI.modal(box, { focus: ta });
+    box.addEventListener('click', (ev) => { if (ev.target === box || ev.target.closest('.sheet-x, .rep-cancel')) m.close(); });
     form.addEventListener('submit', async (ev) => {
       ev.preventDefault();
       const text = ta.value.trim(); if (!text) return;
@@ -344,15 +338,12 @@
       try {
         // ответ Google Формы закрыт (no-cors): узнать можно только о сбое сети
         await fetch(REPORT_URL, { method: 'POST', mode: 'no-cors', body: new URLSearchParams({ [REPORT_FIELD]: `${text}\n\n---\n${context}\n${where}`.slice(0, 4000) }) });
-        close(); UI.toast('Спасибо, сообщение отправлено');
+        m.close(); UI.toast('Спасибо, сообщение отправлено');
       } catch {
         btn.disabled = false; btn.textContent = 'Отправить';
         UI.toast('Не отправилось: нет сети. Текст остался, попробуй ещё раз');
       }
     });
-    document.addEventListener('keydown', key, true);
-    document.body.appendChild(box);
-    setTimeout(() => ta.focus(), 50);
   }
   document.addEventListener('click', (ev) => {
     const b = ev.target.closest('[data-report]'); if (!b) return;
@@ -401,7 +392,7 @@
       if (q) p.set('q', q);
       $('#dict-cards').href = `#/practice/cards${p.toString() ? '?' + p : ''}`;
       $('#dict-cards').textContent = `Карточки по этой выборке · ${list.length > 30 ? `30 из ${list.length}` : list.length}`;
-      const row = (e) => `<div class="wrow" data-ko="${esc(e.ko)}"><div class="w-ko"><span class="ko serif">${esc(e.ko)}</span>${UI.rr(e.ko)}</div>
+      const row = (e) => `<div class="wrow" data-ko="${esc(e.ko)}" tabindex="0"><div class="w-ko"><span class="ko serif">${esc(e.ko)}</span>${UI.rr(e.ko)}</div>
         <div class="w-ru">${esc(e.ru)}<div class="w-meta">${Store.isHard(e.key) ? '<b class="hard">трудное</b> · ' : ''}${esc(e.c)} · ${e.lessons.map((n) => (n === 0 ? 'мои' : `제${n}과`)).join(', ')}</div></div><span class="wpic">${UI.pic(e.ko)}</span>${strength(e.key)}${sayBtn(e.ko, 'sm')}</div>`;
       const groupOf = dictState.sort === 'abc' ? (e) => { const d = H.decompose(e.ko[0]); return d ? d.cho : e.ko[0]; }
         : dictState.sort === 'lesson' && dictState.lesson === 'all' ? (e) => lessonName(e.lesson) : null; // при выбранном уроке заголовок один и не нужен
@@ -674,6 +665,12 @@
   function applyTheme() {
     const t = Store.settings().theme;
     if (t === 'auto') document.documentElement.removeAttribute('data-theme'); else document.documentElement.dataset.theme = t;
+    // цвет строки состояния телефона: при своей теме — её цвет в обоих мета-тегах, при «как в системе» — по системе
+    const COLOR = { light: '#f4efe6', dark: '#13171c' };
+    document.querySelectorAll('meta[name="theme-color"]').forEach((m) => {
+      const own = /dark/.test(m.media) ? 'dark' : 'light';
+      m.content = COLOR[t === 'auto' ? own : t] || COLOR[own];
+    });
   }
 
   window.Views = { wordSheet, report, home, lessons, lesson, dict, hangul, practiceMenu, settings, importLink, intro, progress, applyTheme };

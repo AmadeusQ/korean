@@ -3,6 +3,8 @@
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const shuffle = (a) => { a = [...a]; for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
   const pick = (a) => a[Math.floor(Math.random() * a.length)];
+  // плавная прокрутка, если человек не просил меньше движения
+  const smooth = () => (matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth');
   const uniqBy = (a, f) => { const s = new Set(); return a.filter((x) => { const k = f(x); if (s.has(k)) return false; s.add(k); return true; }); };
 
   const ICONS = {
@@ -35,7 +37,7 @@
   let toastTimer;
   function toast(msg) {
     let t = document.getElementById('toast');
-    if (!t) { t = document.createElement('div'); t.id = 'toast'; document.body.appendChild(t); }
+    if (!t) { t = document.createElement('div'); t.id = 'toast'; t.setAttribute('role', 'status'); document.body.appendChild(t); }
     t.textContent = msg; t.classList.add('show');
     clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), 2600);
   }
@@ -74,22 +76,85 @@
   // Печать 도장
   const stamp = (text) => `<div class="stamp" aria-label="${esc(text)}"><span>${esc(text)}</span></div>`;
 
+  // Окно поверх страницы (карточка слова, правило, подтверждение, фото). Общее для всех окон:
+  // фокус переходит внутрь и возвращается, Tab не уходит под окно, страница под окном не прокручивается,
+  // клавиши не доходят до тренировки, Escape и системное «Назад» (жест на телефоне) закрывают окно, а не уводят со страницы.
+  // m = UI.modal(box, { focus, onKey, onClose }); m.close() → Promise, выполнится, когда история вернулась назад.
+  const modals = [], popWaiters = [];
+  let modalSeq = 0;
+  const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select, textarea, [tabindex]:not([tabindex="-1"])';
+  function modal(box, { focus, onKey, onClose } = {}) {
+    const dlg = box.querySelector('[role="dialog"], [role="alertdialog"]') || box;
+    dlg.setAttribute('aria-modal', 'true');
+    if (!dlg.hasAttribute('tabindex')) dlg.tabIndex = -1;
+    const prev = document.activeElement, id = ++modalSeq;
+    let open = true;
+    const teardown = () => {
+      if (!open) return; open = false;
+      box.remove(); document.removeEventListener('keydown', key, true);
+      modals.splice(modals.indexOf(m), 1);
+      if (!modals.length) document.documentElement.classList.remove('modal-open');
+      if (prev?.isConnected && (!modals.length || modals.at(-1).box.contains(prev))) prev.focus({ preventScroll: true });
+      onClose?.();
+    };
+    const close = () => {
+      if (!open) return Promise.resolve();
+      teardown();
+      if (history.state?.modal !== id) return Promise.resolve();
+      return new Promise((r) => { popWaiters.push(r); history.back(); });
+    };
+    const key = (e) => {
+      if (!box.isConnected) return teardown(); // окно убрал переход по ссылке
+      if (modals.at(-1) !== m) return;
+      e.stopPropagation(); // клавиши — только окну, не тренировке под ним; Enter по-прежнему нажимает кнопку в фокусе
+      if (e.key === 'Escape') { e.preventDefault(); close(); return; }
+      if (e.key === 'Tab') {
+        const f = [...box.querySelectorAll(FOCUSABLE)].filter((x) => x.offsetParent !== null);
+        if (!f.length) { e.preventDefault(); dlg.focus(); return; }
+        const i = f.indexOf(document.activeElement);
+        if (e.shiftKey && i <= 0) { e.preventDefault(); f.at(-1).focus(); } else if (!e.shiftKey && (i === -1 || i === f.length - 1)) { e.preventDefault(); f[0].focus(); }
+        return;
+      }
+      onKey?.(e);
+    };
+    // ссылка внутри окна: сначала закрыть окно (вернуть историю), потом перейти, иначе «Назад» на новой странице упрётся в пустую запись
+    box.addEventListener('click', (e) => {
+      const a = e.target.closest('a[href^="#"]'); if (!a) return;
+      e.preventDefault(); const href = a.getAttribute('href');
+      close().then(() => { location.hash = href; });
+    });
+    const m = { box, close, teardown };
+    modals.push(m);
+    document.addEventListener('keydown', key, true);
+    document.documentElement.classList.add('modal-open');
+    try { history.pushState({ ...(history.state || {}), modal: id }, ''); } catch {}
+    document.body.appendChild(box);
+    (focus || dlg).focus({ preventScroll: true });
+    return m;
+  }
+  // «Назад»: либо это мы закрыли окно сами (close), либо человек нажал «Назад» — тогда закрываем верхнее окно
+  window.addEventListener?.('popstate', () => {
+    if (popWaiters.length) return popWaiters.shift()();
+    modals.at(-1)?.teardown();
+  });
+  // переход на другую страницу убирает все окна (история уже ушла вперёд, назад её не листаем)
+  const dropModals = () => [...modals].reverse().forEach((m) => m.teardown());
+
   // Подтверждение в стиле приложения вместо системного confirm(): UI.ask('Удалить?', 'Удалить', true).then((yes) => …)
   function ask(text, okLabel = 'Да', danger = false) {
     return new Promise((resolve) => {
-      document.querySelectorAll('.sheet-wrap.ask').forEach((x) => x.remove());
       const box = document.createElement('div'); box.className = 'sheet-wrap ask';
-      box.innerHTML = `<div class="sheet ask-sheet" role="alertdialog" aria-modal="true"><p>${esc(text)}</p>
+      box.innerHTML = `<div class="sheet ask-sheet" role="alertdialog"><p>${esc(text)}</p>
         <div class="row"><button type="button" class="btn ${danger ? 'danger' : ''} yes">${esc(okLabel)}</button><button type="button" class="btn ghost no">Отмена</button></div></div>`;
-      const done = (v) => { box.remove(); document.removeEventListener('keydown', key, true); resolve(v); };
-      // клавиши не доходят до тренировки под окном; Enter нажимает кнопку в фокусе, Escape — отмена
-      const key = (e) => { if (!box.isConnected) return done(false); e.stopPropagation(); if (e.key === 'Escape') { e.preventDefault(); done(false); } };
-      box.addEventListener('click', (e) => { if (e.target.closest('.yes')) done(true); else if (e.target === box || e.target.closest('.no')) done(false); });
-      document.addEventListener('keydown', key, true);
-      document.body.appendChild(box);
-      box.querySelector(danger ? '.no' : '.yes').focus({ preventScroll: true });
+      // ответ отдаём, когда окно закрыто и история вернулась: вызвавший может сразу сменить страницу
+      let choosing = false;
+      const m = modal(box, { focus: box.querySelector(danger ? '.no' : '.yes'), onClose: () => { if (!choosing) resolve(false); } }); // Escape, «Назад»
+      const choose = (v) => { choosing = true; m.close().then(() => resolve(v)); };
+      box.addEventListener('click', (e) => {
+        if (e.target.closest('.yes')) choose(true); else if (e.target === box || e.target.closest('.no')) choose(false);
+      });
     });
   }
 
-  window.UI = { ask, esc, shuffle, pick, uniqBy, icon, sayBtn, pr, rr, toast, say, strength, cells, stamp, pic, note };
+  window.UI = { ask, modal, dropModals, smooth, esc, shuffle, pick, uniqBy, icon, sayBtn, pr, rr, toast, say, strength, cells, stamp, pic, note };
 })();

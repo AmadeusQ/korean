@@ -4,7 +4,7 @@
 
   function route() {
     Practice.cleanup(); Reading.stop(); TTS.stop(); // в том числе диалог, который читается по репликам
-    document.querySelectorAll('.sheet-wrap, .lightbox').forEach((x) => x.remove());
+    UI.dropModals();
     const [path, query] = (location.hash.slice(1) || '/').split('?');
     const params = new URLSearchParams(query || '');
     const parts = path.split('/').filter(Boolean);
