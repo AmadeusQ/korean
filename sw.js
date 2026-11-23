@@ -1,6 +1,6 @@
 // Офлайн-режим. Свои файлы: сначала сеть (новые уроки появляются сразу), но не дольше 4 секунд —
 // на слабой связи отдаём из кэша. Шрифты лежат в самом сайте (fonts/), редкие слоги кэшируются при первой встрече.
-const CACHE = 'korean-v20';
+const CACHE = 'korean-v21';
 const SHELL = ['./', './index.html', './app/styles.css', './data/index.js', './data/pictures.js', './manifest.webmanifest', './icon.svg', './icon-192.png', './icon-180.png', './icon-512.png', './icon-maskable-512.png',
   './fonts/fonts.css', './fonts/ibm-plex-sans.woff2', './fonts/noto-sans-kr-core.woff2', './fonts/noto-serif-kr-core.woff2',
   ...['hangul', 'store', 'tts', 'ui', 'keyboard', 'numbers', 'data', 'practice', 'views', 'reading', 'main'].map((f) => `./app/${f}.js`)];

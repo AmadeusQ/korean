@@ -724,6 +724,7 @@
     function step(fn, tok) {
       if (stepping || !alive || (tok !== undefined && tok !== idx)) return;
       stepping = true;
+      TTS.stop(); // текст или реплика прошлого задания не должны звучать поверх следующего
       if (fn) fn();
       idx++; next();
     }
@@ -988,7 +989,7 @@
       if (lastRec.requeued) { queue.pop(); retried.delete(qid(q.item)); }
       if (!lastRec.hadStored) stored.delete(q.item.key);
       lastRec = null; q.undone = true; answered = false;
-      window.speechSynthesis?.cancel();
+      TTS.stop();
       $foot.className = 's-foot'; $foot.innerHTML = '';
       renderChoice(); progress();
     }
@@ -1055,7 +1056,7 @@
       if (q?.kind === 'intro' && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); $foot.querySelector('.next')?.click(); }
     }
     document.addEventListener('keydown', onKey);
-    start.cleanup = () => { alive = false; clearInterval(timer); try { activeRec?.abort(); } catch {} window.speechSynthesis?.cancel(); document.removeEventListener('keydown', onKey); document.body.classList.remove('in-session'); };
+    start.cleanup = () => { alive = false; clearInterval(timer); try { activeRec?.abort(); } catch {} TTS.stop(); document.removeEventListener('keydown', onKey); document.body.classList.remove('in-session'); };
     next();
   }
 
@@ -1110,7 +1111,7 @@
         <p class="muted">${rounds * PAIRS} пар · ошибок: ${misses}${record ? ' · новый рекорд без ошибок' : best ? ` · рекорд без ошибок ${fmt(best)}` : ''}</p>
         <div class="row"><a class="btn" href="#/practice/match?l=${nums.join(',')}&r=${Date.now()}">Ещё раз</a><a class="btn ghost" href="#/">На главную</a></div></section>`;
     }
-    start.cleanup = () => { alive = false; clearInterval(timer); window.speechSynthesis?.cancel(); document.body.classList.remove('in-session'); };
+    start.cleanup = () => { alive = false; clearInterval(timer); TTS.stop(); document.body.classList.remove('in-session'); };
     drawRound();
   }
 
