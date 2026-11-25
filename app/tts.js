@@ -13,7 +13,8 @@
   function utter(text, rate) {
     const u = new SpeechSynthesisUtterance(text);
     u.voice = voice; u.lang = voice.lang;
-    u.rate = rate ?? Store.settings().rate;
+    // Длинный текст (предложение и больше) на обычной скорости читаем чуть медленнее: слова сливаются
+    u.rate = rate ?? Store.settings().rate * (text.trim().split(/\s+/).length > 2 ? 0.85 : 1);
     return u;
   }
 
