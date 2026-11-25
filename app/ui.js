@@ -89,9 +89,12 @@
     if (!dlg.hasAttribute('tabindex')) dlg.tabIndex = -1;
     const prev = document.activeElement, id = ++modalSeq;
     let open = true;
-    const teardown = () => {
+    // instant — без анимации ухода (переход на другую страницу: новое содержимое уже под окном)
+    const teardown = (instant) => {
       if (!open) return; open = false;
-      box.remove(); document.removeEventListener('keydown', key, true);
+      if (instant === true || !box.isConnected || matchMedia('(prefers-reduced-motion: reduce)').matches) box.remove();
+      else { box.classList.add('closing'); box.inert = true; setTimeout(() => box.remove(), 230); }
+      document.removeEventListener('keydown', key, true);
       modals.splice(modals.indexOf(m), 1);
       if (!modals.length) document.documentElement.classList.remove('modal-open');
       if (prev?.isConnected && (!modals.length || modals.at(-1).box.contains(prev))) prev.focus({ preventScroll: true });
@@ -104,7 +107,7 @@
       return new Promise((r) => { popWaiters.push(r); history.back(); });
     };
     const key = (e) => {
-      if (!box.isConnected) return teardown(); // окно убрал переход по ссылке
+      if (!box.isConnected) return teardown(true); // окно убрал переход по ссылке
       if (modals.at(-1) !== m) return;
       e.stopPropagation(); // клавиши — только окну, не тренировке под ним; Enter по-прежнему нажимает кнопку в фокусе
       if (e.key === 'Escape') { e.preventDefault(); close(); return; }
@@ -123,6 +126,32 @@
       e.preventDefault(); const href = a.getAttribute('href');
       close().then(() => { location.hash = href; });
     });
+    // шторка снизу на телефоне: смахнуть вниз — закрыть (если содержимое не прокручено и палец не в поле ввода)
+    if (dlg.classList.contains('sheet')) {
+      let y0 = null, dy = 0, t0 = 0;
+      const back = () => { dlg.style.transition = 'transform .3s var(--ease-drawer)'; dlg.style.transform = ''; };
+      dlg.addEventListener('touchstart', (e) => {
+        y0 = null;
+        if (!matchMedia('(max-width: 760px)').matches || e.touches.length > 1 || dlg.scrollTop > 0 || e.target.closest('textarea, input, select')) return;
+        y0 = e.touches[0].clientY; t0 = performance.now(); dy = 0;
+      }, { passive: true });
+      dlg.addEventListener('touchmove', (e) => {
+        if (y0 === null) return;
+        if (dlg.scrollTop > 0) { y0 = null; back(); return; } // начали прокручивать содержимое
+        dy = Math.max(0, e.touches[0].clientY - y0);
+        dlg.style.transition = 'none'; dlg.style.transform = dy ? `translateY(${dy}px)` : '';
+      }, { passive: true });
+      const end = () => {
+        if (y0 === null) return; y0 = null;
+        const fast = dy > 24 && dy / (performance.now() - t0) > 0.5; // быстрый взмах закрывает и с короткого пути
+        if (dy > Math.min(120, dlg.offsetHeight / 3) || fast) {
+          box.classList.add('swiped');
+          dlg.style.transition = 'transform .22s var(--ease-out)'; dlg.style.transform = 'translateY(100%)';
+          close();
+        } else if (dy) back();
+      };
+      dlg.addEventListener('touchend', end); dlg.addEventListener('touchcancel', () => { if (y0 !== null) { y0 = null; back(); } });
+    }
     const m = { box, close, teardown };
     modals.push(m);
     document.addEventListener('keydown', key, true);
@@ -138,7 +167,7 @@
     modals.at(-1)?.teardown();
   });
   // переход на другую страницу убирает все окна (история уже ушла вперёд, назад её не листаем)
-  const dropModals = () => [...modals].reverse().forEach((m) => m.teardown());
+  const dropModals = () => [...modals].reverse().forEach((m) => m.teardown(true));
 
   // Подтверждение в стиле приложения вместо системного confirm(): UI.ask('Удалить?', 'Удалить', true).then((yes) => …)
   function ask(text, okLabel = 'Да', danger = false) {
