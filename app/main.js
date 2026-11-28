@@ -9,7 +9,7 @@
     const params = new URLSearchParams(query || '');
     const parts = path.split('/').filter(Boolean);
     const tab = parts[0] || 'home';
-    document.querySelectorAll('.nav a').forEach((a) => a.classList.toggle('on', a.dataset.tab === (tab === 'lesson' || tab === 'intro' ? 'lessons' : tab === 'progress' ? 'home' : tab === 'read' ? 'practice' : tab)));
+    document.querySelectorAll('.nav a').forEach((a) => a.classList.toggle('on', a.dataset.tab === (tab === 'lesson' || tab === 'intro' || tab === 'grammar' ? 'lessons' : tab === 'progress' ? 'home' : tab === 'read' ? 'practice' : tab)));
     window.scrollTo(0, 0);
     const nums = params.get('l') ? params.get('l').split(',').filter((x) => x !== '').map(Number).filter((n) => !isNaN(n)) : DB.openNums();
     switch (tab) {
@@ -20,6 +20,7 @@
       case 'settings': return Views.settings(view);
       case 'import': return Views.importLink(view, parts[1] || '');
       case 'intro': return Views.intro(view);
+      case 'grammar': return Views.grammar(view);
       case 'progress': return Views.progress(view);
       case 'read': return parts[1] ? Reading.text(view, parts[1]) : Reading.list(view);
       case 'practice':

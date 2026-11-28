@@ -55,6 +55,7 @@
           <h2 class="h">Что делать сейчас</h2>
           ${quickList(path, due)}
           <a class="link all-modes" href="#/practice">Все режимы тренировки →</a>
+          <a class="link all-modes" href="#/grammar">Вся грамматика →</a>
         </section>
         <div>
           <section class="block">
@@ -140,6 +141,7 @@
   // ---------- Уроки ----------
   function lessons(root) {
     root.innerHTML = `<h1 class="page-title">Уроки</h1>
+      <p class="sm"><a class="link" href="#/grammar">Вся грамматика по урокам →</a></p>
       <div class="lessons">${DB.lessons.map((l) => {
         const keys = DB.entries.filter((e) => e.lesson === l.number).map((e) => e.key);
         const m = Math.round(avgMastery(DB.lessonKeys(l.number)) * 100);
@@ -215,10 +217,8 @@
       const groups = {}; l.phrases.forEach((p) => (groups[p.c || 'Фразы'] = groups[p.c || 'Фразы'] || []).push(p));
       return Object.entries(groups).map(([g, ps]) => `<div class="card list"><h3>${esc(g)}</h3>${ps.map(wordRow).join('')}</div>`).join('');
     },
-    grammar: (l) => l.grammar.map((g) => `<div class="card grammar"><div class="g-head"><h3 class="serif">${esc(g.title)}</h3><span class="muted">${esc(g.short || '')}</span></div>
-      ${g.body.map((p) => `<p>${p}</p>`).join('')}
-      <div class="examples">${g.examples.map((x) => `<div class="exm"><div><span class="ko">${esc(x.ko)}</span><div class="muted sm">${esc(x.ru)}</div></div>${sayBtn(x.ko, 'sm')}</div>`).join('')}</div></div>`).join('')
-      + `<a class="btn" href="#/practice/grammar?l=${l.number}">Тренировать грамматику</a>`,
+    grammar: (l) => l.grammar.map((g) => grammarCard(g)).join('')
+      + `<div class="row"><a class="btn" href="#/practice/grammar?l=${l.number}">Тренировать грамматику</a><a class="btn ghost" href="#/grammar">Вся грамматика</a></div>`,
     dialogues: (l) => `<label class="toggle"><input type="checkbox" class="hide-ru"> Скрыть перевод</label>` + l.dialogues.map((d) => `<div class="card dialog"><h3>${esc(d.title)}</h3>
       ${d.lines.map((x) => `<div class="line">${x.who ? `<span class="who ko">${esc(x.who)}</span>` : '<span class="who"></span>'}<div class="bubble"><span class="ko">${esc(x.ko)}</span><div class="ru">${esc(x.ru)}</div></div>${sayBtn(x.ko, 'sm')}</div>`).join('')}
       <button type="button" class="link play-dialog" data-d="${l.dialogues.indexOf(d)}">${icon('speaker')} <span>Прослушать по репликам</span></button></div>`).join('')
@@ -229,6 +229,29 @@
   };
 
   // Диалог вслух по репликам: звучащая подсвечивается, повторное нажатие останавливает
+  // Карточка правила: во вкладке урока и на странице «Грамматика» (там с подписью урока сверху)
+  function grammarCard(g, meta = '') {
+    return `<div class="card grammar"${g.id ? ` id="g-${esc(g.id)}"` : ''}>${meta}<div class="g-head"><h3 class="serif">${esc(g.title)}</h3><span class="muted">${esc(g.short || '')}</span></div>
+      ${g.body.map((p) => `<p>${p}</p>`).join('')}
+      <div class="examples">${g.examples.map((x) => `<div class="exm"><div><span class="ko">${esc(x.ko)}</span><div class="muted sm">${esc(x.ru)}</div></div>${sayBtn(x.ko, 'sm')}</div>`).join('')}</div></div>`;
+  }
+
+  // ---------- Вся грамматика ----------
+  // Правила всех уроков по порядку. Правило, повторённое в уроке-повторении (copula в уроках 4 и 5), показываем один раз — первым.
+  function grammarPage(root) {
+    const seen = new Map();
+    DB.lessons.forEach((l) => l.grammar.forEach((g) => (seen.has(g.id) ? seen.get(g.id).also.push(l.number) : seen.set(g.id, { g, l, also: [] }))));
+    const items = [...seen.values()];
+    const { current } = DB.path();
+    const meta = ({ l, also }) => `<div class="g-meta"><a class="kicker serif" href="#/lesson/${l.number}">제${l.number}과</a><span class="muted xs">${esc(l.title)}${also.length ? ` · повторение: ${also.map((n) => 'урок ' + n).join(', ')}` : ''}${l.number > current ? ' · урок ещё впереди' : ''}</span>
+      <a class="link xs" href="#/practice/grammar?l=${[l.number, ...also].join(',')}">Тренировать →</a></div>`;
+    root.innerHTML = `<h1 class="page-title">Грамматика</h1>
+      ${items.length ? `<div class="chips g-toc">${items.map(({ g }) => `<button type="button" class="chip" data-g="${esc(g.id)}">${esc(g.title)}</button>`).join('')}<button type="button" class="chip" data-g="${Numbers.RULE.id}">${esc(Numbers.RULE.title)}: ${esc(Numbers.RULE.short)}</button></div>` : ''}
+      ${items.map((it) => grammarCard(it.g, meta(it))).join('')}
+      ${grammarCard(Numbers.RULE, `<div class="g-meta"><span class="kicker serif">수</span><span class="muted xs">Обе системы чисел вместе</span><a class="link xs" href="#/practice/numbers">Тренировать →</a></div>`)}`;
+    root.querySelectorAll('.g-toc .chip').forEach((b) => b.addEventListener('click', () => root.querySelector(`#g-${b.dataset.g}`)?.scrollIntoView({ block: 'start', behavior: UI.smooth() })));
+  }
+
   function playDialog(btn, d) {
     const card = btn.closest('.dialog'), lines = [...card.querySelectorAll('.line')], label = btn.querySelector('span');
     const mark = (i) => lines.forEach((x, k) => x.classList.toggle('speaking', k === i));
@@ -673,5 +696,5 @@
     });
   }
 
-  window.Views = { wordSheet, report, home, lessons, lesson, dict, hangul, practiceMenu, settings, importLink, intro, progress, applyTheme };
+  window.Views = { wordSheet, report, home, lessons, lesson, grammar: grammarPage, dict, hangul, practiceMenu, settings, importLink, intro, progress, applyTheme };
 })();
