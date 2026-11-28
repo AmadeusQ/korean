@@ -282,7 +282,7 @@
     return sentenceLines(nums, true).map((l) => ({ ...l, toks: splitParticles(l.ko, gids.includes('subject')) })).filter((l) => l.toks && l.toks.length <= 8);
   }
   // «младший брат / сестра» → «младший брат», «я (вежливо)» → «я»
-  const shortRu = (s) => s.replace(/\s*\(.*?\)/g, '').split(/\s*[/,]\s*/)[0].trim();
+  const shortRu = (s) => s.replace(/\s*\(.*?\)/g, '').split(/\s*[/,;]\s*/)[0].trim();
   // «Отец из Кореи.» — 아버지는 한국 사람이에요.
   function natLine(p, land) {
     const ko = `${p.ko}${H.topic(p.ko)} ${land.ko} 사람이에요.`, a = shortRu(p.ru);
