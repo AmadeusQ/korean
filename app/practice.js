@@ -17,6 +17,7 @@
     match: { title: 'Найди пары', desc: 'Соедини слова с переводом на время', ex: '짝' },
     timed: { title: '5 минут', desc: 'Сколько успеешь за пять минут', ex: '5분' },
     numbers: { title: 'Числа', desc: '일, 이, 삼 и 하나, 둘, 셋', ex: '123' },
+    numwrite: { title: 'Напиши число', desc: 'Число от 0 до 99 999 — напиши хангылем', ex: '만' },
     shadow: { title: 'Повтори за диктором', desc: 'Послушай фразу и скажи её вслух', ex: '따라', mic: true },
     dialog: { title: 'Ролевой диалог', desc: 'Отвечай за собеседника по ходу разговора', ex: '대화' },
     write: { title: 'Прописи', desc: 'Пиши буквы и слова в клетках', ex: '쓰기' },
@@ -76,6 +77,7 @@
     if (mode === 'read') return readItems(nums);
     if (mode === 'timed') return buildPool('mix', nums);
     if (mode === 'match') return buildPool('words', nums).filter((it) => it.entry.kind === 'word' && [...it.entry.ko].length <= 6);
+    if (mode === 'numwrite') return Numbers.sampleWrite(30).map((n) => ({ ...numItem('s', n), types: ['num-type'] }));
     if (mode === 'numbers') return ['s', 'n'].flatMap((sys) => Numbers.sample(sys, 12).map((n) => numItem(sys, n)));
     if (mode === 'shadow') return micSupported() ? sentenceLines(nums).map((l) => ({ group: 'build', key: 'shadow:' + l.ko, types: ['shadow'], line: l })) : [];
     const tts = TTS.available();
@@ -163,7 +165,7 @@
   const trTypes = () => (Store.settings().typing ? ['translate', 'translate-type'] : ['translate']);
   // Сложность типа задания: 0 — узнать среди вариантов, 1 — выбрать по-корейски или собрать, 2 — написать самому.
   // Новое и слабое чаще спрашиваем полегче, выученное — потруднее: вспомнить сложнее, чем узнать, и запоминается прочнее.
-  const LEVEL = { 'ru-ko': 1, build: 1, translate: 1, sentence: 1, cloze: 1, type: 2, 'translate-type': 2, dictation: 2 };
+  const LEVEL = { 'num-type': 2, 'ru-ko': 1, build: 1, translate: 1, sentence: 1, cloze: 1, type: 2, 'translate-type': 2, dictation: 2 };
   function pickType(it) {
     if (it.types.length === 1) return it.types[0];
     const b = Store.box(it.key), want = b < 1 ? 0 : b < 3 ? 1 : 2;
@@ -174,8 +176,10 @@
   }
 
   // Числа помним по диапазонам, а не по каждому числу: иначе хранилище и ссылка переноса разрастаются
-  const numBucket = (n) => (n <= 10 ? 'small' : n < 100 ? 'mid' : 'big');
-  const numItem = (sys, n) => ({ group: 'numbers', key: `num:${sys}:${numBucket(n)}`, uid: `num:${sys}:${n}`, types: TTS.available() ? ['num-read', 'num-value', 'num-listen'] : ['num-read', 'num-value'], sys, n });
+  const numBucket = (n) => (n <= 10 ? 'small' : n < 100 ? 'mid' : n < 10000 ? 'big' : 'huge');
+  // выученные китайско-корейские числа иногда надо написать самому
+  const numItem = (sys, n) => ({ group: 'numbers', key: `num:${sys}:${numBucket(n)}`, uid: `num:${sys}:${n}`, sys, n,
+    types: [...(n < 10000 ? ['num-read', 'num-value'] : []), ...(TTS.available() ? ['num-listen'] : []), ...(sys === 's' && (n >= 10000 || n >= 10 && Store.settings().typing) ? ['num-type'] : [])] });
 
   // Ключ из хранилища → задание (для «Моих ошибок»). null, если материала уже нет или он вне выбранных уроков.
   function resolveKey(key, nums) {
@@ -223,7 +227,7 @@
       case 'num': {
         const [sys, b] = rest; if (!Numbers.SYSTEMS[sys]) return null;
         const max = sys === 'n' ? 99 : 9999; const r = (lo, hi) => lo + Math.floor(Math.random() * (hi - lo + 1));
-        const n = b === 'small' ? r(1, 10) : b === 'mid' ? r(11, 99) : b === 'big' && max > 99 ? r(100, 2000) : null;
+        const n = b === 'small' ? r(1, 10) : b === 'mid' ? r(11, 99) : b === 'big' && max > 99 ? r(100, 2000) : b === 'huge' && max > 99 ? r(10000, 99999) : null;
         return n ? numItem(sys, n) : null;
       }
       default: return null;
@@ -389,7 +393,7 @@
     }
     return out;
   }
-  const numExplain = (it) => { const S = Numbers.SYSTEMS[it.sys]; const r = S.read(it.n); return `<div class="ex-line"><b>${it.n}</b> = <span class="ko">${r}</span>${sayBtn(r, 'sm')}</div><div class="ex-ru">${S.title}: ${S.use}</div><div class="ex-rule"><button type="button" class="link" data-rule="numbers">Как устроены числа →</button></div>`; };
+  const numExplain = (it) => { const S = Numbers.SYSTEMS[it.sys]; const r = S.read(it.n); return `<div class="ex-line"><b>${Numbers.fmt(it.n)}</b> = <span class="ko">${r}</span>${sayBtn(r, 'sm')}</div><div class="ex-ru">${S.title}: ${S.use}</div><div class="ex-rule"><button type="button" class="link" data-rule="numbers">Как устроены числа →</button></div>`; };
   const RULE_NAME = { topic: '은/는', copula: '이에요/예요', yesno: '네/아니요', subject: '이/가', neg: '이/가 아니에요' };
   const ruleBtn = (id) => `<button type="button" class="link" data-rule="${id}">Правило${RULE_NAME[id] ? ' ' + RULE_NAME[id] : ''} →</button>`;
   const entryExplain = (e) => `<div class="ex-line"><span class="ko">${esc(e.ko)}</span>${UI.rr(e.ko)}${sayBtn(e.ko, 'sm')}${UI.pic(e.ko, 'sm')}</div><div class="ex-ru">${esc(e.ru)}</div>${UI.note(e.ko)}`;
@@ -621,6 +625,11 @@
       const S = Numbers.SYSTEMS[it.sys]; const ds = shuffle(Numbers.near(it.n, it.sys)).slice(0, 3);
       return { kind: 'choice', label: 'Какое это число?', prompt: `<div class="q-ko md">${S.read(it.n)}</div><div class="hint">${S.title}</div>`,
         options: shuffle([it.n, ...ds]).map((x) => ({ text: String(x), ok: x === it.n })), sayAfter: S.read(it.n), explain: numExplain(it) };
+    },
+    'num-type'(it) {
+      const r = Numbers.sino(it.n);
+      return { kind: 'type', label: 'Напиши число по-корейски', prompt: `<div class="q-num">${Numbers.fmt(it.n)}</div><div class="hint">китайско-корейские, пробелы не важны</div>`,
+        answer: r, accept: Numbers.sinoAlt(it.n), sayAfter: r, explain: numExplain(it) };
     },
     'num-listen'(it) {
       const S = Numbers.SYSTEMS[it.sys]; const ds = shuffle(Numbers.near(it.n, it.sys)).slice(0, 3);
