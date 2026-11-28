@@ -5,4 +5,6 @@ window.LESSON_FILES = [
   'lesson-03',
   'lesson-04',
   'lesson-05',
+  'lesson-06',
+  'lesson-07',
 ];

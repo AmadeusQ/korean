@@ -31,6 +31,7 @@
   }
   const copula = (w) => (hasBatchim(w) ? '이에요' : '예요');
   const topic = (w) => (hasBatchim(w) ? '은' : '는');
+  const subject = (w) => (hasBatchim(w) ? '이' : '가');
 
   // Упрощённая романизация (без большинства правил ассимиляции)
   const SPLIT = { 'ㄳ': ['ㄱ', 'ㅅ'], 'ㄵ': ['ㄴ', 'ㅈ'], 'ㄶ': ['ㄴ', 'ㅎ'], 'ㄺ': ['ㄹ', 'ㄱ'], 'ㄻ': ['ㄹ', 'ㅁ'], 'ㄼ': ['ㄹ', 'ㅂ'],
@@ -175,5 +176,5 @@
     return null;
   }
 
-  window.Hangul = { NAMES, CHO, JUNG, JONG, UNITS, JONG_SOUND, SOUND_RR, decompose, compose, hasBatchim, copula, topic, romanize, pron, similarTo, jamoInfo, isSyllable };
+  window.Hangul = { NAMES, CHO, JUNG, JONG, UNITS, JONG_SOUND, SOUND_RR, decompose, compose, hasBatchim, copula, topic, subject, romanize, pron, similarTo, jamoInfo, isSyllable };
 })();

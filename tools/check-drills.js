@@ -59,7 +59,7 @@ const ROUNDS = 6; // вопросы случайные: каждый генер�
         if (texts.some((x) => !String(x).trim())) errors.add(`${where}: пустой вариант`);
       }
       // картинка подсказала бы ответ: в вопросе её быть не должно (кроме «Перед тобой: …», где она и есть условие)
-      if (t !== 'yesno' && /class="pic/.test(q.prompt || '')) errors.add(`${where}: картинка в вопросе`);
+      if (t !== 'yesno' && t !== 'neg' && /class="pic/.test(q.prompt || '')) errors.add(`${where}: картинка в вопросе`);
       if ((q.kind === 'type' || q.kind === 'build') && !q.answer) errors.add(`${where}: нет ответа`);
       if (q.kind === 'build' && q.answerToks && q.answerToks.some((x) => !q.tokens.includes(x))) errors.add(`${where}: плашек ответа нет среди плашек`);
     }
@@ -75,7 +75,7 @@ const ROUNDS = 6; // вопросы случайные: каждый генер�
     if (seenIds.has(t.id)) errors.add(`текст ${t.id}: повтор id`); seenIds.add(t.id);
     t.lines.forEach((l) => DB.parseLine(l.ko, t.names).forEach((w) => {
       const where = `текст ${t.id} «${l.ko}»: ${w.text}`;
-      if (!w.entry && !w.name) errors.add(`${where} — нет в словаре и в names`);
+      if (!w.entry && !w.name && !w.num) errors.add(`${where} — нет в словаре и в names`);
       else if (w.entry && Math.min(...w.entry.lessons.filter((n) => n > 0)) > t.lesson) errors.add(`${where} — слово из урока ${Math.min(...w.entry.lessons)}, позже текста`);
     }));
   }

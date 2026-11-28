@@ -30,6 +30,12 @@
   // Какой вопрос подходит к ответу: о человеке, предмете, профессии, стране
   const WH = { who: '누구예요?', what: '뭐예요?', job: '직업이 뭐예요?', nat: '어느 나라 사람이에요?' };
   const whOf = (e) => (e.c === 'Страны' && e.gen ? 'nat' : e.job ? 'job' : !showable(e) ? null : e.p ? 'who' : e.c === 'Люди' ? null : 'what');
+  // С чем можно спутать то, что «перед тобой» (для 네/아니요 и 이/가 아니에요): та же тема, другой смысл.
+  // 학생 и 대학생 не противопоставляем: студент университета — тоже студент. Слова из уроков, до которых ещё не дошли, не берём.
+  function negPeers(e) {
+    const reach = Math.max(DB.path().current, e.lesson);
+    return DB.entries.filter((x) => showable(x) && x.lesson <= reach && !x.ko.includes(e.ko) && !e.ko.includes(x.ko) && shortRu(x.ru) !== shortRu(e.ru) && (e.job ? x.job : !x.job && x.c === e.c));
+  }
   const TEST_LEN = 20, FILTER_LEN = 30; // выборка из словаря: до 30 слов за раз
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   const micSupported = () => !!SR;
@@ -114,6 +120,11 @@
       // 누구예요? / 뭐예요? — с урока, где эти вопросы появились
       if (entries.some((e) => e.ko === '누구예요?')) shuffle(entries.filter((e) => e.kind === 'word' && whOf(e))).slice(0, 16).forEach((e) => add('grammar', 'g:wh:' + e.ko, ['wh'], { entry: e }));
       if (gids.includes('yesno')) shuffle(nouns.filter(showable)).slice(0, 20).forEach((e) => add('grammar', 'g:yesno:' + e.ko, ['yesno'], { entry: e }));
+      // 이/가: 저 → 제가 (не по правилу), местоимения не берём
+      if (gids.includes('subject')) shuffle([...persons.filter((e) => !e.t), ...nouns]).slice(0, 20).forEach((e) => add('grammar', 'g:subject:' + e.ko, ['subject'], { entry: e }));
+      if (gids.includes('neg')) shuffle(nouns.filter((e) => showable(e) && negPeers(e).length)).slice(0, 20).forEach((e) => add('grammar', 'g:neg:' + e.ko, ['neg'], { entry: e }));
+      // урок про китайско-корейские числа: немного чисел и в его тренировке
+      if (gids.includes('sino')) Numbers.sample('s', 8).forEach((n) => pool.push(numItem('s', n)));
       if (gids.includes('topic')) {
         shuffle([...persons, ...nouns]).slice(0, 20).forEach((e) => add('grammar', 'g:topic:' + e.ko, ['topic'], { entry: e }));
         for (let i = 0; i < 12 && persons.length && jobs.length; i++) {
@@ -183,7 +194,8 @@
       case 'g': {
         const [gid, ...g] = rest; const val = g.join(':');
         if (gid === 'wh') { const e = word(val); return e && whOf(e) ? { group: 'grammar', key, types: ['wh'], entry: e } : null; }
-        if (gid === 'copula' || gid === 'topic' || gid === 'yesno') { const e = word(val); return e ? { group: 'grammar', key, types: [gid], entry: e } : null; }
+        if (gid === 'neg') { const e = word(val); return e && showable(e) && negPeers(e).length ? { group: 'grammar', key, types: ['neg'], entry: e } : null; }
+        if (gid === 'copula' || gid === 'topic' || gid === 'yesno' || gid === 'subject') { const e = word(val); return e ? { group: 'grammar', key, types: [gid], entry: e } : null; }
         if (gid === 'sent') { const [pk, jk] = val.split('|'); const p = word(pk), jb = word(jk); return p?.p && jb?.job ? { group: 'grammar', key, types: ['sentence'], p, jb } : null; }
         return null;
       }
@@ -248,21 +260,26 @@
     return uniqBy(lines, (l) => l.ko).filter((l) => l.ko.trim().split(/\s+/).length >= 2);
   }
   // «Составь предложение»: частицы 은/는 и связка 이에요/예요 отдельными плашками, к ним пара-обманка
-  const PAIR = { 은: '는', 는: '은', 이에요: '예요', 예요: '이에요' };
-  function splitParticles(ko) {
-    const out = []; let n = 0;
+  // 이/가 — пара только там, где это частица (toks.subj), а не «этот» в 이 사람
+  const PAIR = { 은: '는', 는: '은', 이에요: '예요', 예요: '이에요', 이: '가', 가: '이' };
+  const isPart = (toks, i) => !!PAIR[toks[i]] && (!['이', '가'].includes(toks[i]) || !!toks.subj?.includes(i));
+  function splitParticles(ko, subj = false) {
+    const out = []; let n = 0; out.subj = [];
     for (const raw of ko.trim().split(/\s+/)) {
       const t = raw.replace(/[.,!?]/g, ''); if (!t) continue;
-      const cop = t.match(/^(.+?)(이에요|예요)$/), top = t.match(/^(.+)(은|는)$/);
+      const cop = t.match(/^(.+?)(이에요|예요)$/), top = t.match(/^(.+)(은|는)$/), sb = subj && !DB.byKo.has(t) && t.match(/^(.+)(이|가)$/);
       if (cop && /[가-힣]$/.test(cop[1])) { out.push(cop[1], cop[2]); n++; }
       else if (top && DB.byKo.has(top[1])) { out.push(top[1], top[2]); n++; }
+      // 저 + 가 = 제가: плашки «제» и «가» сбили бы с толку
+      else if (sb && DB.byKo.has(sb[1]) && sb[1] !== '제' && H.subject(sb[1]) === sb[2]) { out.push(sb[1], sb[2]); out.subj.push(out.length - 1); n++; }
       else out.push(t);
     }
     return n ? out : null;
   }
   function translateLines(nums) {
-    if (!DB.grammar(nums).some((g) => g.id === 'copula' || g.id === 'topic')) return [];
-    return sentenceLines(nums, true).map((l) => ({ ...l, toks: splitParticles(l.ko) })).filter((l) => l.toks && l.toks.length <= 8);
+    const gids = DB.grammar(nums).map((g) => g.id);
+    if (!gids.includes('copula') && !gids.includes('topic')) return [];
+    return sentenceLines(nums, true).map((l) => ({ ...l, toks: splitParticles(l.ko, gids.includes('subject')) })).filter((l) => l.toks && l.toks.length <= 8);
   }
   // «младший брат / сестра» → «младший брат», «я (вежливо)» → «я»
   const shortRu = (s) => s.replace(/\s*\(.*?\)/g, '').split(/\s*[/,]\s*/)[0].trim();
@@ -373,7 +390,7 @@
     return out;
   }
   const numExplain = (it) => { const S = Numbers.SYSTEMS[it.sys]; const r = S.read(it.n); return `<div class="ex-line"><b>${it.n}</b> = <span class="ko">${r}</span>${sayBtn(r, 'sm')}</div><div class="ex-ru">${S.title}: ${S.use}</div><div class="ex-rule"><button type="button" class="link" data-rule="numbers">Как устроены числа →</button></div>`; };
-  const RULE_NAME = { topic: '은/는', copula: '이에요/예요', yesno: '네/아니요' };
+  const RULE_NAME = { topic: '은/는', copula: '이에요/예요', yesno: '네/아니요', subject: '이/가', neg: '이/가 아니에요' };
   const ruleBtn = (id) => `<button type="button" class="link" data-rule="${id}">Правило${RULE_NAME[id] ? ' ' + RULE_NAME[id] : ''} →</button>`;
   const entryExplain = (e) => `<div class="ex-line"><span class="ko">${esc(e.ko)}</span>${UI.rr(e.ko)}${sayBtn(e.ko, 'sm')}${UI.pic(e.ko, 'sm')}</div><div class="ex-ru">${esc(e.ru)}</div>${UI.note(e.ko)}`;
   // Знаки препинания в вариантах и плашках подсказывали ответ (вопрос — тот, что с «?», плашка с точкой — последняя)
@@ -458,9 +475,7 @@
     yesno(it) {
       // «Перед тобой шапка. 책이에요?» — 아니요, 모자예요.
       const e = it.entry;
-      // 학생 и 대학생 не противопоставляем: студент университета — тоже студент
-      const reach = Math.max(DB.path().current, e.lesson); // не спрашивать слова из уроков, до которых ещё не дошли
-      const same = DB.entries.filter((x) => showable(x) && x.lesson <= reach && !x.ko.includes(e.ko) && !e.ko.includes(x.ko) && shortRu(x.ru) !== shortRu(e.ru) && (e.job ? x.job : !x.job && x.c === e.c));
+      const same = negPeers(e);
       const asked = same.length && Math.random() < 0.6 ? pick(same) : e;
       const yes = asked === e;
       const cop = (w) => w + H.copula(w), badCop = (w) => w + (H.copula(w) === '이에요' ? '예요' : '이에요');
@@ -550,6 +565,28 @@
         options: ['은', '는'].map((x) => ({ text: x, ok: x === ok, ko: true })), sayAfter: e.ko + ok,
         explain: `<div class="ex-line">${esc(e.ko)} кончается на ${H.hasBatchim(e.ko) ? 'согласную → <b>은</b>' : 'гласную → <b>는</b>'}</div>${ruleBtn('topic')}` };
     },
+    subject(it) {
+      const e = it.entry; const ok = H.subject(e.ko);
+      const q = e.c === 'Места' ? '어디예요?' : e.p || e.job ? '누구예요?' : '뭐예요?';
+      const full = `${e.ko}${ok} ${q}`;
+      return { kind: 'choice', label: 'Выбери частицу подлежащего', prompt: `<span class="cells big">${[...e.ko].map((c) => `<span class="cell">${esc(c)}</span>`).join('')}<span class="cell blank-cell">?</span></span><div class="q-ko md">… ${q}</div><div class="hint">${esc(e.ru)}</div>`,
+        options: ['이', '가'].map((x) => ({ text: x, ok: x === ok, ko: true })), sayAfter: full,
+        explain: `<div class="ex-line">${esc(e.ko)} кончается на ${H.hasBatchim(e.ko) ? 'согласную → <b>이</b>' : 'гласную → <b>가</b>'}</div><div class="ex-line"><span class="ko">${esc(full)}</span>${sayBtn(full, 'sm')}</div>${ruleBtn('subject')}` };
+    },
+    neg(it) {
+      // «Перед тобой стул. 책상이에요?» — 아니요, 책상이 아니에요. 의자예요.
+      const e = it.entry, asked = pick(negPeers(e));
+      const cop = (w) => w + H.copula(w), badCop = (w) => w + (H.copula(w) === '이에요' ? '예요' : '이에요');
+      const not = (w, bad) => `${w}${bad ? (H.subject(w) === '이' ? '가' : '이') : H.subject(w)} 아니에요`;
+      const right = `아니요, ${not(asked.ko)}. ${cop(e.ko)}.`;
+      const opts = uniqBy([right, `아니요, ${not(asked.ko, true)}. ${cop(e.ko)}.`, `아니요, ${not(asked.ko)}. ${badCop(e.ko)}.`, `아니요, ${not(e.ko)}. ${cop(asked.ko)}.`], (x) => x);
+      const question = cop(asked.ko) + '?';
+      return { kind: 'choice', label: 'Ответь «нет» полным ответом', autoplay: question,
+        prompt: `${UI.pic(e.ko, 'md')}<div class="hint">Перед тобой: <b>${esc(shortRu(e.ru))}</b></div><div class="q-ko md">${esc(question)}</div>${sayBtn(question)}`,
+        options: shuffle(opts).map((x) => ({ text: x, ok: x === right, ko: true })), sayAfter: right,
+        explain: `<div class="ex-line">Это не ${esc(shortRu(asked.ru))}, а ${esc(shortRu(e.ru))} → <span class="ko">${esc(right)}</span>${sayBtn(right, 'sm')}</div>
+          <div class="ex-ru"><span class="ko">${esc(asked.ko)}</span> кончается на ${H.hasBatchim(asked.ko) ? 'согласную → 이 아니에요' : 'гласную → 가 아니에요'}</div><div class="row">${ruleBtn('neg')}${ruleBtn('copula')}</div>` };
+    },
     sentence(it) {
       const { p, jb } = it; const a = H.topic(p.ko), b = H.copula(jb.ko);
       const full = `${p.ko}${a} ${jb.ko}${b}.`;
@@ -562,7 +599,8 @@
       const l = it.line, e = it.entry; const tokens = l.ko.split(/\s+/);
       const shown = tokens.map((t, i) => i === it.ti ? `<span class="slot">＿＿＿</span>${esc(t.slice(e.ko.length))}` : esc(t)).join(' ');
       const rest = tokens[it.ti].replace(/[.,!?]/g, '').slice(e.ko.length);
-      const fits = (x) => !rest || H.hasBatchim(x.ko) === H.hasBatchim(e.ko); // по видимой частице не отсеять варианты
+      // по видимой частице не отсеять варианты; 학생 к 대학생 тоже подошло бы по смыслу
+      const fits = (x) => (!rest || H.hasBatchim(x.ko) === H.hasBatchim(e.ko)) && !x.ko.includes(e.ko) && !e.ko.includes(x.ko);
       const ds = fillDistractors(e, sameKind(e).filter((x) => x.c === e.c && fits(x)), lenNear(e).filter(fits), 3, (x) => x.ko);
       return { kind: 'choice', label: 'Вставь пропущенное слово', prompt: `<div class="q-ko md">${shown}</div><div class="hint">${esc(l.ru)}</div>`,
         options: shuffle([e, ...ds]).map((x) => ({ text: x.ko, ok: x === e, ko: true })), sayAfter: l.ko,
@@ -637,11 +675,11 @@
     },
     translate(it) {
       const l = it.line, toks = it.toks;
-      const extra = [...new Set(toks.filter((t) => PAIR[t]).map((t) => PAIR[t]))].filter((x) => !toks.includes(x));
+      const extra = [...new Set(toks.filter((t, i) => isPart(toks, i)).map((t) => PAIR[t]))].filter((x) => !toks.includes(x));
       const tokens = [...toks, ...extra];
       const order = shuffle(tokens.map((t, i) => i));
-      const why = toks.map((t, i) => PAIR[t] && i ? `<div class="ex-ru"><span class="ko">${esc(toks[i - 1])}</span> кончается на ${H.hasBatchim(toks[i - 1]) ? 'согласную' : 'гласную'} → <b class="ko">${esc(t)}</b></div>` : '').join('');
-      const rules = [toks.some((t) => t === '은' || t === '는') && '<button type="button" class="link" data-rule="topic">Правило 은/는 →</button>', toks.some((t) => t === '이에요' || t === '예요') && '<button type="button" class="link" data-rule="copula">Правило 이에요/예요 →</button>'].filter(Boolean).join('');
+      const why = toks.map((t, i) => isPart(toks, i) && i ? `<div class="ex-ru"><span class="ko">${esc(toks[i - 1])}</span> кончается на ${H.hasBatchim(toks[i - 1]) ? 'согласную' : 'гласную'} → <b class="ko">${esc(t)}</b></div>` : '').join('');
+      const rules = [toks.some((t) => t === '은' || t === '는') && '<button type="button" class="link" data-rule="topic">Правило 은/는 →</button>', toks.some((t) => t === '이에요' || t === '예요') && '<button type="button" class="link" data-rule="copula">Правило 이에요/예요 →</button>', toks.subj?.length && ruleBtn('subject')].filter(Boolean).join('');
       return { kind: 'build', label: 'Составь предложение', prompt: `<div class="q-ru">${esc(l.ru)}</div><div class="hint">Частицы отдельно.${extra.length ? " Лишние плашки останутся внизу." : ""}</div>`,
         tokens, need: toks.length, answerToks: toks, order, answer: l.ko, sayAfter: l.ko,
         explain: `<div class="ex-line"><span class="ko">${esc(l.ko)}</span>${sayBtn(l.ko, 'sm')}</div>${why}<div class="row">${rules}</div>` };

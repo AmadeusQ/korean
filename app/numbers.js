@@ -59,5 +59,19 @@
     ],
   };
 
-  window.Numbers = { sino, native, SYSTEMS, RULE, sample, near };
+  // Обратно: 오천오백 → 5500, 공일공 (по цифрам) → 010. null, если это не число.
+  const SV = { 영: 0, 공: 0, 일: 1, 이: 2, 삼: 3, 사: 4, 오: 5, 육: 6, 칠: 7, 팔: 8, 구: 9 }, SU = { 십: 10, 백: 100, 천: 1000 };
+  function parseSino(s) {
+    if (!/^[영공일이삼사오육칠팔구십백천만]+$/.test(s)) return null;
+    if (!/[십백천만]/.test(s)) return [...s].map((c) => SV[c]).join('');
+    let total = 0, sec = 0, d = null;
+    for (const c of s) {
+      if (c in SV) { if (d !== null) return null; d = SV[c]; }
+      else if (c === '만') { total += (sec + (d ?? (sec ? 0 : 1))) * 10000; sec = 0; d = null; }
+      else { sec += (d ?? 1) * SU[c]; d = null; }
+    }
+    return String(total + sec + (d ?? 0));
+  }
+
+  window.Numbers = { sino, native, SYSTEMS, RULE, sample, near, parseSino };
 })();

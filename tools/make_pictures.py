@@ -41,6 +41,8 @@ PICTURES = {
     '대학생': 'graduation-cap', '학생': 'backpack', '의사': 'stethoscope', '경찰': 'siren', '요리사': 'chef-hat',
     '개발자': 'laptop', '선생님': 'school',
     # действия и прочее
+    '은행': 'tabler:building-bank', '병원': 'hospital', '식당': 'utensils-crossed', '영화관': 'film', '노래방': 'mic-vocal',
+    '전화': 'phone', '이메일': 'mail', '컴퓨터': 'monitor', '텔레비전': 'tv-minimal', '주스': 'cup-soda', '변호사': 'scale',
     '회의': 'presentation', '대화': 'messages-square', '파티': 'party-popper', '한국어': 'languages',
 }
 SHAPES = re.compile(r'<(?:path|circle|rect|line|polyline|polygon|ellipse)\b[^>]*/>')

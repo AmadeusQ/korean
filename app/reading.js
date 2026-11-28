@@ -229,7 +229,7 @@
     let pos = 0, okN = 0, n = 0; const miss = [];
     for (const b of btns) {
       const w = lines[+b.dataset.i].words[+b.dataset.k];
-      if (w.name || w.entry?.t === 'num') continue;
+      if (w.name || w.num || w.entry?.t === 'num') continue;
       n++;
       const full = onlyHangul(w.text), base = onlyHangul(w.base);
       let hit = -1, len = 0;

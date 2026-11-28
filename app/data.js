@@ -88,11 +88,15 @@
         const bare = r.replace(/[.,!?…«»"]/g, '');
         if (names[bare]) return { base: bare, ru: names[bare] + ' (имя)', name: true };
         if (word(bare)) return { base: bare, ru: word(bare).ru, entry: word(bare) };
+        // число хангылем (사천, 오천오백): слова такого в словаре нет, показываем значение
+        const num = (b) => { const v = window.Numbers && Numbers.parseSino(b); return v && [...b].length > 1 ? { base: b, ru: 'число ' + v, num: true } : null; };
+        if (num(bare)) return num(bare);
         for (const [suf, about] of SUFFIX) {
           if (!bare.endsWith(suf) || bare.length <= suf.length) continue;
           const b = bare.slice(0, -suf.length);
           if (names[b]) return { base: b, ru: names[b] + ' (имя)', name: true, suf, sufRu: about };
           if (word(b)) return { base: b, ru: word(b).ru, entry: word(b), suf, sufRu: about };
+          if (num(b)) return { ...num(b), suf, sufRu: about };
         }
         if (span) return null;
         const p = DB.byKo.get(r) || DB.byKo.get(bare);
